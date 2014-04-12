@@ -54,7 +54,7 @@ module LIST
 //  rule _ in .MyList => false
 
   /*@  Get list length: */
-  syntax Int ::= size(MyList)   [function]
+  syntax Int ::= size(MyList)   [function, hook(Collection:size)]
 //  rule
 //    size(/* L1:MyList */ MyListItem(_) L2:MyList)
 //  =>

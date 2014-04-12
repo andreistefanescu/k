@@ -79,7 +79,7 @@ module MAP
 //  rule values(.MyMap) => .MyBag
 
   /*@ Get Map size (TODO: number of key/value pairs? Total combined number of keys and values?):*/
-  syntax Int ::= size(MyMap)   [function]
+  syntax Int ::= size(MyMap)   [function, hook(Collection:size)]
 //  rule size(_ |-> _ M:MyMap) => 1 +Int size(M)
 //  rule size(.MyMap) => 0
 endmodule
