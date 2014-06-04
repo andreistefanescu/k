@@ -1,9 +1,7 @@
 package org.kframework.backend.java.symbolic;
 
-import com.microsoft.z3.ArithExpr;
-import com.microsoft.z3.BoolExpr;
-import com.microsoft.z3.Expr;
-import com.microsoft.z3.Z3Exception;
+import com.microsoft.z3.*;
+import org.kframework.backend.java.builtins.BitVector;
 import org.kframework.backend.java.builtins.BoolToken;
 import org.kframework.backend.java.builtins.IntToken;
 import org.kframework.backend.java.kil.KItem;
@@ -12,8 +10,6 @@ import org.kframework.backend.java.kil.KList;
 import org.kframework.backend.java.kil.Variable;
 import org.kframework.backend.java.kil.Z3Term;
 import org.kframework.kil.ASTNode;
-
-import com.microsoft.z3.Context;
 
 import java.util.Set;
 
@@ -44,6 +40,15 @@ public class KILtoZ3 extends CopyOnWriteTransformer {
     public ASTNode transform(IntToken intToken) {
         try {
             return new Z3Term(context.MkInt(intToken.bigIntegerValue().longValue()));
+        } catch (Z3Exception e) {
+            throw new RuntimeException(e.getMessage(), e.getCause());
+        }
+    }
+
+    @Override
+    public ASTNode transform(BitVector bitVector) {
+        try {
+            return new Z3Term(context.MkBV(bitVector.signedValue().longValue(), bitVector.bitwidth()));
         } catch (Z3Exception e) {
             throw new RuntimeException(e.getMessage(), e.getCause());
         }
@@ -162,26 +167,62 @@ public class KILtoZ3 extends CopyOnWriteTransformer {
                 Expr expression1 = ((Z3Term) kList.get(0).accept(this)).expression();
                 Expr expression2 = ((Z3Term) kList.get(1).accept(this)).expression();
                 return new Z3Term(context.MkNot(context.MkEq(expression1, expression2)));
-                
-            }else if (kLabel.label().equals("'[E]K_._") && kList.size() == 2) {
+
+            } else if (kLabel.label().equals("'[E]K_._") && kList.size() == 2) {
                 Expr expression1 = (ArithExpr) ((Z3Term) kList.get(0).accept(this)).expression();
                 Expr expression2 = (BoolExpr) ((Z3Term) kList.get(1).accept(this)).expression();
                 Expr[] newExpr = new Expr[1];
                 newExpr[0] = expression1;
                 return new Z3Term(context.MkExists(newExpr, expression2, 1, null, null, null, null));
 
-            }else if (kLabel.label().equals("'[A]K_._") && kList.size() == 2) {
+            } else if (kLabel.label().equals("'[A]K_._") && kList.size() == 2) {
                 Expr expression1 = (ArithExpr) ((Z3Term) kList.get(0).accept(this)).expression();
                 Expr expression2 = (BoolExpr) ((Z3Term) kList.get(1).accept(this)).expression();
                 Expr[] newExpr = new Expr[1];
                 newExpr[0] = expression1;
                 return new Z3Term(context.MkForall(newExpr, expression2, 1, null, null, null, null));
-            }
-            
-            else {
+            } else if (kLabel.label().equals("'extractMInt")) {
+                BitVecExpr bitvectorExpression = (BitVecExpr) ((Z3Term) kList.get(0).accept(this)).expression();
+                int beginIndex = ((IntToken) kList.get(1)).intValue();
+                int endIndex = ((IntToken) kList.get(2)).intValue() - 1;
+                return new Z3Term(context.MkExtract(endIndex, beginIndex, bitvectorExpression));
+            } else if (kLabel.label().equals("'concatenateMInt")) {
+                BitVecExpr bitvectorExpression1 = (BitVecExpr) ((Z3Term) kList.get(0).accept(this)).expression();
+                BitVecExpr bitvectorExpression2 = (BitVecExpr) ((Z3Term) kList.get(1).accept(this)).expression();
+                // reverse order for arguments
+                return new Z3Term(context.MkConcat(bitvectorExpression2, bitvectorExpression1));
+            } else if (kLabel.label().equals("'addMInt")) {
+                BitVecExpr bitvectorExpression1 = (BitVecExpr) ((Z3Term) kList.get(0).accept(this)).expression();
+                BitVecExpr bitvectorExpression2 = (BitVecExpr) ((Z3Term) kList.get(1).accept(this)).expression();
+                return new Z3Term(context.MkBVAdd(bitvectorExpression1, bitvectorExpression2));
+            } else if (kLabel.label().equals("'subMInt")) {
+                BitVecExpr bitvectorExpression1 = (BitVecExpr) ((Z3Term) kList.get(0).accept(this)).expression();
+                BitVecExpr bitvectorExpression2 = (BitVecExpr) ((Z3Term) kList.get(1).accept(this)).expression();
+                return new Z3Term(context.MkBVSub(bitvectorExpression1, bitvectorExpression2));
+            } else if (kLabel.label().equals("'mulMInt")) {
+                BitVecExpr bitvectorExpression1 = (BitVecExpr) ((Z3Term) kList.get(0).accept(this)).expression();
+                BitVecExpr bitvectorExpression2 = (BitVecExpr) ((Z3Term) kList.get(1).accept(this)).expression();
+                return new Z3Term(context.MkBVMul(bitvectorExpression1, bitvectorExpression2));
+            } else if (kLabel.label().equals("'udivMInt")) {
+                BitVecExpr bitvectorExpression1 = (BitVecExpr) ((Z3Term) kList.get(0).accept(this)).expression();
+                BitVecExpr bitvectorExpression2 = (BitVecExpr) ((Z3Term) kList.get(1).accept(this)).expression();
+                return new Z3Term(context.MkBVUDiv(bitvectorExpression1, bitvectorExpression2));
+            } else if (kLabel.label().equals("'xorMInt")) {
+                BitVecExpr bitvectorExpression1 = (BitVecExpr) ((Z3Term) kList.get(0).accept(this)).expression();
+                BitVecExpr bitvectorExpression2 = (BitVecExpr) ((Z3Term) kList.get(1).accept(this)).expression();
+                return new Z3Term(context.MkBVXOR(bitvectorExpression1, bitvectorExpression2));
+            } else if (kLabel.label().equals("'ultMInt")) {
+                BitVecExpr bitvectorExpression1 = (BitVecExpr) ((Z3Term) kList.get(0).accept(this)).expression();
+                BitVecExpr bitvectorExpression2 = (BitVecExpr) ((Z3Term) kList.get(1).accept(this)).expression();
+                return new Z3Term(context.MkBVULT(bitvectorExpression1, bitvectorExpression2));
+            } else if (kLabel.label().equals("'eqMInt")) {
+                BitVecExpr bitvectorExpression1 = (BitVecExpr) ((Z3Term) kList.get(0).accept(this)).expression();
+                BitVecExpr bitvectorExpression2 = (BitVecExpr) ((Z3Term) kList.get(1).accept(this)).expression();
+                return new Z3Term(context.MkEq(bitvectorExpression1, bitvectorExpression2));
+            } else {
                 throw new RuntimeException("cannot translate term to Z3 format " + kItem);
             }
-        } catch (ClassCastException e) {
+        } catch (ClassCastException | ArithmeticException e) {
             throw new RuntimeException(e.getMessage(), e.getCause());
         } catch (Z3Exception e) {
             throw new RuntimeException(e.getMessage(), e.getCause());
@@ -198,11 +239,14 @@ public class KILtoZ3 extends CopyOnWriteTransformer {
             if (variable.sort().equals(BoolToken.SORT_NAME)) {
                 //if (boundVariables.contains(variable)) {}
                 return new Z3Term(context.MkBoolConst(variable.name()));
-            } else /*if (variable.sort().equals(IntToken.SORT_NAME))*/ {
+            } else if (variable.sort().equals(IntToken.SORT_NAME)) {
                 return new Z3Term(context.MkIntConst(variable.name()));
-            } /*else {
-                throw new RuntimeException();
-            }*/
+            } else if (variable.sort().equals(BitVector.SORT_NAME)) {
+                // TODO(AndreiS): allow for bitvector variables of any bitwidth
+                return new Z3Term(context.MkBVConst(variable.name(), Integer.SIZE));
+            } else {
+                throw new RuntimeException("cannot translate term to Z3 format " + variable);
+            }
         } catch (Z3Exception e) {
             throw new RuntimeException(e.getMessage(), e.getCause());
         }
