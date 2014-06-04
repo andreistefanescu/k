@@ -137,20 +137,33 @@ module MINT
                 | neMInt(MInt, MInt)    [function, hook(#MINT:ne)]
 
   /*
+   * Returns a machine integer with the underlying bits the bits of the first
+   * machine integer concatenated with the bits of the second machine integer.
+   * The bits of the first machine integer are on the more significant
+   * positions.
+   */
+  syntax MInt ::= concatenateMInt(MInt, MInt)   [function, hook(#MINT:concat)]
+
+  /*
+   * extractMInt(MI:MInt, N:Int, M:Int) 
+   * Returns a machine integer with the underlying bits the bits on positions N,  MI on   
+   */
+  syntax MInt ::= extractMInt(MInt, Int, Int)   [function, hook(#MINT:extract)]
+
+  /*
    * Returns a list of digits representing the given machine integers in the
    * given base. Each digit is represented as a machine integers. The base must
    * be an integer greater than 1. Useful for serializing a integer to a
    * sequence of bytes.
    */
-  syntax MyList ::= digitsOfMInt(MInt, Int)   [function, hook(#MINT:toDigits)]
+  syntax MyList ::= digitsOfMInt(MInt, Int, Int)   [function, hook(#MINT:toDigits)]
 
   /*
-   * Returns a machine integer representing the given list of digits in the
-   * given base. Each digit is represented as a machine integers. The base must
-   * be an integer greater than 1. Useful for deserializing an integer from a
-   * sequence of bytes.
+   * Returns a machine integer representing the given list of digits. Each digit
+   * is represented as a machine integers. The list must be non-empty. Useful
+   * for deserializing an integer from a sequence of bytes.
    */
-  syntax MInt ::= mIntOfDigits(MyList, Int)   [function, hook(#MINT:fromDigits)]
+  syntax MInt ::= mIntOfDigits(MyList)   [function, hook(#MINT:fromDigits)]
 
 
   /* Implementation with K rules */
@@ -162,7 +175,8 @@ module MINT
     ((I +Int (1 <<Int (N -Int 1))) modInt (1 <<Int N)) -Int (1 <<Int (N -Int 1))
   rule uvalueMInt(mi(N:Int, I:Int)) => I modInt (1 <<Int N)
 
-  rule zeroMInt(MI:MInt) => uvalueMInt(MI) ==Int 0
+  // TODO(AndreiS): change
+  rule zeroMInt(MI:MInt) => eqMInt(MI, xorMInt(MI, MI))
 
   /*
    * Arithmetic operations without overflow
@@ -295,31 +309,33 @@ module MINT
     (I1 modInt (1 <<Int N)) =/=Int (I2 modInt (1 <<Int N))
 
   /*
+   * Composition and decomposition 
+   */
+  rule
+    concatenateMInt(mi(N1:Int, I1:Int), mi(N2:Int, I2:Int))
+  =>
+    mi(N1 +Int N2, (I1 <<Int N2) |Int (I2 &Int umaxMInt(N2)))
+  rule
+    extractMInt(mi(N:Int, I:Int), M1:Int, M2:Int)
+  =>
+    mi(M2 -Int M1, (I >>Int M1) &Int umaxMInt(M2 -Int M1))
+  when (M1 <Int M2) andBool (M1 <=Int N) andBool (M2 <=Int N)
+
+  /*
    * Conversion to and from a list of digits
    */
   rule
-    digitsOfMInt(MI:MInt, N:Int)
+    digitsOfMInt(MI:MInt, N:Int, M:Int)
   =>
-    digitsOfMIntHelper(uvalueMInt(MI), N, bitwidthMInt(MI))
-  syntax MyList ::= digitsOfMIntHelper(Int, Int, Int)   [function]
-  rule
-    digitsOfMIntHelper(I:Int, N:Int, M:Int)
-  =>
-    digitsOfMIntHelper(I >>Int N, N, M -Int N),
-    MyListItem(mi(N, I %Int (1 <<Int N)))
+    digitsOfMInt(MI, N, M -Int 1),
+    MyListItem(extractMInt(MI, (N *Int (M -Int 1)), (N *Int M)))
   when M >Int 0
-  rule digitsOfMIntHelper(0, _:Int, 0) => .MyList
+  rule digitsOfMInt(_:MInt, _:Int, 0) => .MyList
 
   rule
-    mIntOfDigits(L:MyList, N:Int)
+    mIntOfDigits(MyListItem(MI1:MInt), MyListItem(MI2:MInt), L:MyList)
   =>
-    mi(N *Int size(L), mIntOfDigitsHelper(L, N))
-  syntax Int ::= mIntOfDigitsHelper(MyList, Int)    [function]
-  rule
-    mIntOfDigitsHelper((L:MyList, MyListItem(MI:MInt)), N:Int)
-  =>
-    (mIntOfDigitsHelper(L, N) <<Int N) +Int uvalueMInt(MI)
-  when bitwidthMInt(MI) ==Int N
-  rule mIntOfDigitsHelper(.MyList, _:Int) => 0
+    concatenateMInt(MI1, mIntOfDigits(MyListItem(MI2), L))
+  rule mIntOfDigits(MyListItem(MI:MInt)) => MI
 endmodule
 
