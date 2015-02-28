@@ -126,9 +126,9 @@ public class ExecutorDebugger implements Debugger {
         }
         RewriteRelation finalRelation;
         if (steps >= 0) {
-            finalRelation = executor.step(getState(currentState).getRawResult(), steps, true);
+            finalRelation = executor.step(getState(currentState), steps, true);
         } else {
-            finalRelation = executor.run(getState(currentState).getRawResult(), true);
+            finalRelation = executor.run(getState(currentState), true);
         }
         KRunGraph currentGraph = finalRelation.getExecutionGraph().get();
         //merge the new graph into the current graph
@@ -152,7 +152,7 @@ public class ExecutorDebugger implements Debugger {
                     + "If you previously used the search command you must"
                     + "first select a solution with the select command before executing steps of rewrites!");
         }
-        SearchResults results = executor.search(null, steps, SearchType.PLUS, defaultPattern, getState(currentState).getRawResult(), defaultPatternInfo);
+        SearchResults results = executor.search(null, steps, SearchType.PLUS, defaultPattern, getState(currentState).getRawResult(), defaultPatternInfo, true);
         mergeSearchGraph(results.getGraph());
         currentState = null;
         return results;

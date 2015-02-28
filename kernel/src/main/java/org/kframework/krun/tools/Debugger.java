@@ -18,6 +18,7 @@ import org.apache.commons.codec.binary.Base64InputStream;
 import org.apache.commons.codec.binary.Base64OutputStream;
 import org.kframework.backend.unparser.PrintTransition;
 import org.kframework.kil.Attributes;
+import org.kframework.kil.Definition;
 import org.kframework.kil.StringBuiltin;
 import org.kframework.kil.Term;
 import org.kframework.kil.loader.Context;
@@ -33,13 +34,13 @@ import org.kframework.transformation.Transformation;
 import org.kframework.utils.BinaryLoader;
 import org.kframework.utils.errorsystem.KExceptionManager;
 import org.kframework.utils.file.FileUtil;
+import org.kframework.utils.inject.Concrete;
 import org.kframework.utils.inject.InjectGeneric;
 import org.kframework.utils.inject.Main;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.ParameterException;
 import com.google.inject.Inject;
-import com.google.inject.Provider;
 
 public interface Debugger {
 
@@ -122,8 +123,7 @@ public interface Debugger {
 
     public static class Tool implements Transformation<Void, Void> {
 
-        private final KExceptionManager kem;
-        private final Provider<Term> initialConfiguration;
+        private final Term initialConfiguration;
         private final KompileOptions kompileOptions;
         private final BinaryLoader loader;
         @InjectGeneric private Transformation<KRunState, String> statePrinter;
@@ -133,28 +133,28 @@ public interface Debugger {
         private final Debugger debugger;
         private final Context context;
         private final FileUtil files;
+        private final Definition definition;
 
         @Inject
         Tool(
-                KExceptionManager kem,
-                @Main Provider<Term> initialConfiguration,
+                @Main Term initialConfiguration,
                 @Main KompileOptions kompileOptions,
                 BinaryLoader loader,
                 @Main Debugger debugger,
                 @Main Context context,
-                @Main FileUtil files) {
-            this.kem = kem;
+                @Main FileUtil files,
+                @Main(Concrete.class) Definition definition) {
             this.initialConfiguration = initialConfiguration;
             this.kompileOptions = kompileOptions;
             this.loader = loader;
             this.debugger = debugger;
             this.context = context;
             this.files = files;
+            this.definition = definition;
         }
 
         Tool(
-                KExceptionManager kem,
-                @Main Provider<Term> initialConfiguration,
+                @Main Term initialConfiguration,
                 @Main KompileOptions kompileOptions,
                 BinaryLoader loader,
                 Transformation<KRunState, String> statePrinter,
@@ -163,8 +163,9 @@ public interface Debugger {
                 Transformation<Transition, String> transitionPrinter,
                 @Main Debugger debugger,
                 @Main Context context,
-                @Main FileUtil files) {
-            this(kem, initialConfiguration, kompileOptions, loader, debugger, context, files);
+                @Main FileUtil files,
+                @Main(Concrete.class) Definition definition) {
+            this(initialConfiguration, kompileOptions, loader, debugger, context, files, definition);
             this.statePrinter = statePrinter;
             this.searchPrinter = searchPrinter;
             this.graphPrinter = graphPrinter;
@@ -178,6 +179,7 @@ public interface Debugger {
         @Override
         public Void run(Void v, Attributes a) {
             a.add(Context.class, context);
+            a.add(Definition.class, definition);
             ConsoleReader reader;
             try {
                 reader = new ConsoleReader();
@@ -198,7 +200,7 @@ public interface Debugger {
             reader.addCompletor(new MultiCompletor(completors));
 
             try {
-                debugger.start(initialConfiguration.get());
+                debugger.start(initialConfiguration);
                 System.out.println("After running one step of execution the result is:\n");
                 System.out.println(statePrinter.run(debugger.getState(debugger.getCurrentState()), a));
             } catch (UnsupportedBackendOptionException e) {
