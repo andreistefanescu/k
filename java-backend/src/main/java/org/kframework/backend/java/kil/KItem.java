@@ -6,10 +6,13 @@ import org.kframework.backend.java.builtins.MetaK;
 import org.kframework.backend.java.builtins.SortMembership;
 import org.kframework.backend.java.rewritemachine.KAbstractRewriteMachine;
 import org.kframework.backend.java.symbolic.BuiltinFunction;
+import org.kframework.backend.java.symbolic.ConjunctiveFormula;
 import org.kframework.backend.java.symbolic.JavaExecutionOptions;
 import org.kframework.backend.java.symbolic.Matcher;
 import org.kframework.backend.java.symbolic.NonACPatternMatcher;
 import org.kframework.backend.java.symbolic.RuleAuditing;
+import org.kframework.backend.java.symbolic.SymbolicRewriter;
+import org.kframework.backend.java.symbolic.SymbolicUnifier;
 import org.kframework.backend.java.symbolic.Transformer;
 import org.kframework.backend.java.symbolic.Unifier;
 import org.kframework.backend.java.symbolic.Visitor;
@@ -437,7 +440,7 @@ public class KItem extends Term implements KItemRepresentation {
                     Term owiseResult = null;
 
                     for (Rule rule : definition.functionRules().get(kLabelConstant)) {
-                            try {
+                        try {
                             if (rule == RuleAuditing.getAuditingRule()) {
                                 RuleAuditing.beginAudit();
                             } else if (RuleAuditing.isAuditBegun() && RuleAuditing.getAuditingRule() == null) {
@@ -464,20 +467,11 @@ public class KItem extends Term implements KItemRepresentation {
                                         context, false);
 
                             if (rule.containsAttribute("owise")) {
-                                /*
-                                 * YilongL: consider applying ``owise'' rule only when the
-                                 * function is ground. This is fine because 1) it's OK not
-                                 * to fully evaluate non-ground function during kompilation;
-                                 * and 2) it's better to get stuck rather than to apply the
-                                 * wrong ``owise'' rule during execution.
-                                 */
-                                if (kItem.isGround()) {
-                                    if (owiseResult != null) {
-                                        throw KExceptionManager.criticalError("Found multiple [owise] rules for the function with KLabel " + kItem.kLabel, rule);
-                                    }
-                                    RuleAuditing.succeed(rule);
-                                    owiseResult = rightHandSide;
+                                if (owiseResult != null) {
+                                    throw KExceptionManager.criticalError("Found multiple [owise] rules for the function with KLabel " + kItem.kLabel, rule);
                                 }
+                                RuleAuditing.succeed(rule);
+                                owiseResult = rightHandSide;
                             } else {
                                 if (tool == Tool.KRUN) {
                                     assert result == null || result.equals(rightHandSide):
@@ -510,6 +504,31 @@ public class KItem extends Term implements KItemRepresentation {
                     if (result != null) {
                         return result;
                     } else if (owiseResult != null) {
+                        if (!kItem.isGround()) {
+                            if (context.global().tool != Tool.KRUN) {
+                                return kItem;
+                            }
+                            /**
+                             * set {@code owiseResult} to null if one of the rules may apply
+                             */
+                            for (Rule rule : definition.functionRules().get(kLabelConstant)) {
+                                if (rule.containsAttribute("owise")) {
+                                    continue;
+                                }
+
+                                ConstrainedTerm subject = new ConstrainedTerm(
+                                        kItem.kList(),
+                                        context);
+                                ConstrainedTerm pattern = new ConstrainedTerm(
+                                        ((KItem) rule.leftHandSide()).kList(),
+                                        ConjunctiveFormula.of(context)
+                                                .add(rule.lookups())
+                                                .addAll(rule.requires()));
+                                if (!subject.unify(pattern).isEmpty()) {
+                                    return kItem;
+                                }
+                            }
+                        }
                         return owiseResult;
                     }
                 }

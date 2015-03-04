@@ -3,10 +3,13 @@ package org.kframework.backend.java.symbolic;
 
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.BiMap;
+import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.SetMultimap;
 import com.google.common.collect.Sets;
 import com.google.inject.Inject;
+import org.apache.commons.lang3.tuple.Pair;
 import org.kframework.backend.java.builtins.BoolToken;
 import org.kframework.backend.java.builtins.FreshOperations;
 import org.kframework.backend.java.builtins.MetaK;
@@ -24,6 +27,7 @@ import org.kframework.krun.api.SearchType;
 import org.kframework.utils.errorsystem.KExceptionManager.KEMException;
 
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -47,6 +51,12 @@ public class SymbolicRewriter {
     private boolean transition;
     private RuleIndex ruleIndex;
     private KRunState.Counter counter;
+    private SetMultimap<ConstrainedTerm, Rule> disabledRules = HashMultimap.create();
+
+    private Stopwatch rw = Stopwatch.createUnstarted();
+    private long totalRules = 0;
+    private long kRules = 0;
+    private long typeRules = 0;
 
     @Inject
     public SymbolicRewriter(Definition definition, KompileOptions kompileOptions, JavaExecutionOptions javaOptions,
@@ -148,8 +158,18 @@ public class SymbolicRewriter {
 
             while (strategy.hasNext()) {
                 transition = strategy.nextIsTransition();
-                ArrayList<Rule> rules = Lists.newArrayList(strategy.next());
-    //            System.out.println("rules.size: " + rules.size());
+                HashSet<Rule> rules = Sets.newHashSet(strategy.next());
+                //rules.removeAll(disabledRules.get(subject));
+
+                ArrayList<Rule> failedRules = Lists.newArrayList();
+                ArrayList<Pair<ConstrainedTerm, Rule>> internalResults = Lists.newArrayList();
+                totalRules += rules.size();
+                kRules += rules.stream().filter(Rule::containsKCell).count();
+                typeRules += rules.stream()
+                        .filter(r -> !r.leftHandSide().getCellContentsByName(CellLabel.of("type")).isEmpty())
+                        .filter(r -> !r.containsKCell())
+                        .count();
+
                 for (Rule rule : rules) {
                     try {
                         ruleStopwatch.reset();
@@ -161,20 +181,27 @@ public class SymbolicRewriter {
                             System.err.println("\nAuditing " + rule + "...\n");
                         }
 
-                        ConstrainedTerm pattern = buildPattern(rule, subject.termContext());
+                        List<ConjunctiveFormula> unificationConstraints = subject.unify(
+                                buildPattern(rule, subject.termContext()));
 
-                        for (ConjunctiveFormula unificationConstraint : subject.unify(pattern)) {
+                        for (ConjunctiveFormula unificationConstraint : unificationConstraints) {
                             RuleAuditing.succeed(rule);
                             /* compute all results */
+                            rw.start();
                             ConstrainedTerm result = buildResult(rule, unificationConstraint);
-                            results.add(result);
+                            rw.stop();
+                            internalResults.add(Pair.of(result, rule));
                             appliedRules.add(rule);
                             substitutions.add(unificationConstraint.substitution());
                             Coverage.print(definition.kRunOptions().experimental.coverage, subject);
                             Coverage.print(definition.kRunOptions().experimental.coverage, rule);
-                            if (results.size() == successorBound) {
-                                return;
+                            if (internalResults.size() == successorBound) {
+                                break;
                             }
+                        }
+
+                        if (unificationConstraints.isEmpty()) {
+                            failedRules.add(rule);
                         }
                     } catch (KEMException e) {
                         e.exception.addTraceFrame("while evaluating rule at " + rule.getSource() + rule.getLocation());
@@ -194,7 +221,22 @@ public class SymbolicRewriter {
                 // If we've found matching results from one equivalence class then
                 // we are done, as we can't match rules from two equivalence classes
                 // in the same step.
-                if (results.size() > 0) {
+                if (internalResults.size() > 0) {
+                    internalResults.stream().map(Pair::getLeft).forEach(results::add);
+                    SetMultimap<ConstrainedTerm, Rule> resultDisabledRules = HashMultimap.create();
+                    internalResults.stream().forEach(p -> {
+                        if (p.getRight().isCompiledForFastRewriting()) {
+                            failedRules.stream()
+                                    .filter(r -> r.readCells() != null && p.getRight().writeCells() != null)
+                                    .filter(r -> Sets.intersection(r.readCells(), p.getRight().writeCells()).isEmpty())
+                                    .forEach(r -> resultDisabledRules.put(p.getLeft(), r));
+                            disabledRules.get(subject).stream()
+                                    .filter(r -> r.readCells() != null && p.getRight().writeCells() != null)
+                                    .filter(r -> Sets.intersection(r.readCells(), p.getRight().writeCells()).isEmpty())
+                                    .forEach(r -> resultDisabledRules.put(p.getLeft(), r));
+                        }
+                    });
+                    disabledRules = resultDisabledRules;
                     return;
                 }
             }
@@ -448,6 +490,10 @@ public class SymbolicRewriter {
             ConstrainedTerm initialTerm,
             ConstrainedTerm targetTerm,
             List<Rule> rules) {
+        rw.reset();
+        totalRules = 0;
+        kRules = 0;
+        typeRules = 0;
         List<ConstrainedTerm> proofResults = new ArrayList<>();
         Set<ConstrainedTerm> visited = new HashSet<>();
         List<ConstrainedTerm> queue = new ArrayList<>();
@@ -555,6 +601,8 @@ public class SymbolicRewriter {
              */
         }
 
+        System.err.println("build time " + rw.elapsed(TimeUnit.MILLISECONDS));
+        System.err.println("rules (k/type/total) " + kRules + "/" + typeRules + "/" + totalRules);
         return proofResults;
     }
 

@@ -98,6 +98,9 @@ public class Rule extends JavaSymbolicObject {
 
     private final boolean modifyCellStructure;
 
+    private final Set<CellLabel> readCells;
+    private final Set<CellLabel> writeCells;
+
     // TODO(YilongL): make it final
     private boolean isSortPredicate;
     private final Sort predSort;
@@ -242,7 +245,59 @@ public class Rule extends JavaSymbolicObject {
             modifyCellStructure = true;
         }
         this.modifyCellStructure = modifyCellStructure;
+
+        /*
+        final ImmutableSet.Builder<CellLabel> readCellsBuilder = ImmutableSet.builder();
+        leftHandSide.accept(new LocalVisitor() {
+            @Override
+            public void visit(CellCollection cellCollection) {
+                cellCollection.cells().entries().stream()
+                        .filter(e -> !(e.getValue().content() instanceof CellCollection))
+                        .forEach(e -> readCellsBuilder.add(e.getKey()));
+                cellCollection.cells().values().stream().forEach(cell -> {
+                    if (cell.content() instanceof CellCollection) {
+                        visit((CellCollection) cell.content());
+                    }
+                });
+            }
+        });
+        readCells = readCellsBuilder.build();
+        final ImmutableSet.Builder<CellLabel> writeCellsBuilder = ImmutableSet.builder();
+        rightHandSide.accept(new LocalVisitor() {
+            @Override
+            public void visit(CellCollection cellCollection) {
+                cellCollection.cells().entries().stream()
+                        .filter(e -> !(e.getValue().content() instanceof CellCollection))
+                        .filter(e -> !leftHandSide.getCellContentsByName(e.getKey()).contains(e.getValue().content()))
+                        .forEach(e -> writeCellsBuilder.add(e.getKey()));
+                cellCollection.cells().values().stream().forEach(cell -> {
+                    if (cell.content() instanceof CellCollection) {
+                        visit((CellCollection) cell.content());
+                    }
+                });
+            }
+        });
+        writeCells = writeCellsBuilder.build();
+        */
+        if (compiledForFastRewriting) {
+            final ImmutableSet.Builder<CellLabel> readBuilder = ImmutableSet.builder();
+            lhsOfReadCells.keySet().stream().forEach(c -> {
+                termContext.definition().getConfigurationStructureMap().descendants(c.name()).stream()
+                        .forEach(s -> readBuilder.add(CellLabel.of(s)));
+            });
+            readCells = readBuilder.build();
+            final ImmutableSet.Builder<CellLabel> writeBuilder = ImmutableSet.builder();
+            rhsOfWriteCells.keySet().stream().forEach(c -> {
+                termContext.definition().getConfigurationStructureMap().descendants(c.name()).stream()
+                        .forEach(s -> writeBuilder.add(CellLabel.of(s)));
+            });
+            writeCells = writeBuilder.build();
+
+        } else {
+            readCells = writeCells = null;
+        }
     }
+
 
     /**
      * Private helper method that computes bound variables that can be reused to
@@ -454,6 +509,14 @@ public class Rule extends JavaSymbolicObject {
         return modifyCellStructure;
     }
 
+    public Set<CellLabel> readCells() {
+        return readCells;
+    }
+
+    public Set<CellLabel> writeCells() {
+        return writeCells;
+    }
+
     @Override
     public Rule substitute(Map<Variable, ? extends Term> substitution, TermContext context) {
         return (Rule) super.substitute(substitution, context);
@@ -538,4 +601,5 @@ public class Rule extends JavaSymbolicObject {
     public void accept(Visitor visitor) {
         visitor.visit(this);
     }
+
 }

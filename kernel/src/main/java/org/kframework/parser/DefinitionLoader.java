@@ -197,8 +197,10 @@ public class DefinitionLoader {
                 Thread t1 = sdf2Table.run_sdf2table_parallel(files.resolveTemp("def"), "Concrete");
                 t2 = sdf2Table.run_sdf2table_parallel(files.resolveTemp("ground"), "Concrete");
                 t1.join();
+                t2.join();
                 files.copyTempFileToKompiledDirectory("def/Integration.sdf");
                 files.copyTempFileToKompiledFile("def/Concrete.tbl", "Rule.tbl");
+                files.copyTempFileToKompiledFile("ground/Concrete.tbl", "Ground.tbl");
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw KExceptionManager.criticalError(
@@ -249,17 +251,6 @@ public class DefinitionLoader {
         def = (Definition) new NormalizeASTTransformer(context, kem).visitNode(def);
 
         sw.printIntermediate("Parsing Rules [" + (clf.getKept().size() - cachedSentences) + "/" + clf.getKept().size() + "]");
-
-        try {
-            if (t2 != null) {
-                t2.join();
-                files.copyTempFileToKompiledFile("ground/Concrete.tbl", "Ground.tbl");
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw KExceptionManager.criticalError(
-                    "Thread was interrupted trying to run SDF2Table");
-        }
 
         return def;
     }
