@@ -7,7 +7,7 @@ module IMP-SYNTAX
   syntax BExp  ::= Bool
                  | AExp "<=" AExp             [seqstrict, latex({#1}\leq{#2})]
                  | "!" BExp                   [strict]
-                 > BExp "&&" BExp             [left, strict(1)]
+                 > BExp "&&" BExp             [left, strict]
                  | "(" BExp ")"               [bracket]
   syntax Block ::= "{" "}"
                  | "{" Stmt "}"
@@ -41,8 +41,9 @@ module IMP
 // BExp
   rule I1 <= I2 => I1 <=Int I2
   rule ! T => notBool T
-  rule true && B => B
-  rule false && _ => false
+  //rule true && B => B
+  //rule false && _ => false
+  rule T1 && T2 => T1 andBool T2 
 // Block
   rule {} => .   [structural]
   rule {S} => S  [structural]
@@ -135,6 +136,7 @@ module IMP
     =>
       ListItem(
         "module ImpMap = Map.Make(String);;\n"
+        +String "exception Side_Condition_Failure;;\n"
         +String "let stateRef = ref ImpMap.empty;;\n"
         +String C +String ";;\n"
         +String "ImpMap.iter (fun key value ->  print_string(key ^ \" \" ^ (string_of_int value)^ \"\\n\")) !stateRef;;\n")

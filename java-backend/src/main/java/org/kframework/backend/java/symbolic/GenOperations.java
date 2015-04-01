@@ -69,6 +69,10 @@ public class GenOperations {
                 .put("'_/Int_", "/")
                 .put("'_<=Int_", "<=")
                 .put("'_andBool_", "&&")
+                .put("'_orBool_", "||")
+                .put("'_==K_", "=")
+                .put("'_=/=K_", "<>")
+                .put("'_==Int_", "=")
                 .build();
         public final ImmutableMap<String, String> prefix = ImmutableMap.<String, String>builder()
                 .put("'notBool_", "not")
