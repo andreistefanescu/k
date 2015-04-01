@@ -60,6 +60,14 @@ public class SymbolicRewriter {
                 if (step == bound) {
                     finalState = new JavaKRunState(constrainedTerm, counter, Optional.of(step));
                 }
+
+                if (GenOperations.reset) {
+                    GenOperations.reset = false;
+                    constrainedTerm = new ConstrainedTerm(
+                            constrainedTerm.term(),
+                            constrainedTerm.termContext());
+                }
+                GenOperations.constraint = constrainedTerm.constraint();
             } else {
                 finalState = new JavaKRunState(constrainedTerm, counter, Optional.of(step - 1));
                 break;
