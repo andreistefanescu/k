@@ -15,6 +15,7 @@ import org.junit.Rule;
 import org.junit.rules.TestName;
 import org.kframework.kil.Definition;
 import org.kframework.kil.Sources;
+import org.kframework.kil.loader.CollectProductionsVisitor;
 import org.kframework.kil.loader.Context;
 import org.kframework.parser.outer.Outer;
 
@@ -44,12 +45,13 @@ public abstract class BaseTest extends SDFCompilerTest {
         public DefinitionWithContext(Definition d, Context c) {
             this.definition = d;
             this.context = c;
+            new CollectProductionsVisitor(c).visitNode(d);
         }
     }
 
     private File testResource(String baseName) {
         return new File(new File("k-distribution/src/test/resources" + baseName)
-                .getAbsoluteFile().toString().replace("k-distribution/k-distribution", "k-distribution"));
+                .getAbsoluteFile().toString().replace("k-distribution" + File.separator + "k-distribution", "k-distribution"));
         // a bit of a hack to get around not having a clear working directory
         // Eclipse runs tests within k/k-distribution, IntelliJ within /k
     }
@@ -106,7 +108,8 @@ public abstract class BaseTest extends SDFCompilerTest {
         def.setItems(Outer.parse(Sources.generatedBy(TstKILtoKOREIT.class), definitionText, null));
         def.setMainModule("TEST");
         def.setMainSyntaxModule("TEST");
-        return new DefinitionWithContext(def, null);
+        Context context = new Context();
+        return new DefinitionWithContext(def, context);
     }
 
     private String clean(String definitionText) {

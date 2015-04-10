@@ -22,6 +22,16 @@
       <artifactId>kore</artifactId>
       <version>${project.version}</version>
     </dependency>
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <version>18.0</version>
+    </dependency>
+    <dependency>
+      <groupId>io.github.nicolasstucki</groupId>
+      <artifactId>multisets_2.11</artifactId>
+      <version>0.2</version>
+    </dependency>
   </dependencies>
 
   <build>
@@ -47,6 +57,11 @@
             </goals>
           </execution>
         </executions>
+        <configuration>
+          <args>
+            <arg>-Xexperimental</arg>
+          </args>
+        </configuration>
       </plugin>
     </plugins>
   </build>

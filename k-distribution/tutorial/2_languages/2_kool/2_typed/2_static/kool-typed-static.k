@@ -105,7 +105,7 @@ static semantics of KOOL using the modified programs.  To avoid seeing
 the wrapper in the generated documentation, we associate it an
 ``invisibility'' latex attribute below.  */
 
-  syntax Id ::= "Object" | "Main"
+  syntax Id ::= "Object" [token] | "Main" [token]
 
 //@ \subsection{Types}
 
@@ -719,6 +719,9 @@ of the language need to insert runtime checks for downcasting to be safe. */
                               +String "\" and \"" +String Id2String(C2)
                               +String "\" are incompatible!\n") </out>
     when notBool(C1 in S2) andBool notBool(C2 in S1)
+    [transition]
+    // ugly solution to avoid non-confluence (rule may apply before
+    // extendsAll is populated); strategies will solve the problem nicely.
 
 
 /*@ \subsubsection{Cleanup tasks}

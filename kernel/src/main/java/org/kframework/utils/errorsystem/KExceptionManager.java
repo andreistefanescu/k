@@ -14,6 +14,7 @@ import org.kframework.utils.inject.RequestScoped;
 import com.google.inject.Inject;
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -26,7 +27,7 @@ public class KExceptionManager {
     private final GlobalOptions options;
 
     @Inject
-    KExceptionManager(GlobalOptions options) {
+    public KExceptionManager(GlobalOptions options) {
         this.options = options;
     }
 
@@ -40,7 +41,8 @@ public class KExceptionManager {
                 }
                 exceptions.add(new KException(ExceptionType.ERROR, KExceptionGroup.INTERNAL,
                         "Uncaught exception thrown of type " + e.getClass().getSimpleName()
-                        + ".\nPlease file a bug report at https://github.com/kframework/k/issues", e));
+                        + ".\nPlease rerun your program with the --debug flag to generate a stack trace, "
+                        + "and file a bug report at https://github.com/kframework/k/issues", e));
                 print();
             }
         });
@@ -131,6 +133,14 @@ public class KExceptionManager {
         return create(ExceptionType.ERROR, KExceptionGroup.INNER_PARSER, message, null, e, location, source);
     }
 
+    public void addKException(KException kex) {
+        exceptions.add(kex);
+    }
+
+    public void addAllKException(Collection<KException> kex) {
+        exceptions.addAll(kex);
+    }
+
     public void registerCompilerWarning(String message) {
         register(ExceptionType.WARNING, KExceptionGroup.COMPILER, message, null, null, null, null);
     }
@@ -203,7 +213,7 @@ public class KExceptionManager {
             return;
         synchronized(exceptions) {
             exceptions.add(exception);
-            if (exception.type == ExceptionType.ERROR) {
+            if (exception.type == ExceptionType.ERROR || options.warnings2errors) {
                 throw new KEMException(exception);
             }
         }

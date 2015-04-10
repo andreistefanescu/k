@@ -1,8 +1,10 @@
 // Copyright (c) 2013-2015 K Team. All Rights Reserved.
 package org.kframework.backend.java.builtins;
 
-
 import org.kframework.backend.java.kil.TermContext;
+
+import java.math.BigInteger;
+import java.util.Random;
 
 /**
  * Table of {@code public static} methods on builtin integers.
@@ -24,11 +26,19 @@ public class BuiltinIntOperations {
     }
 
     public static IntToken div(IntToken term1, IntToken term2, TermContext context) {
-        return IntToken.of(term1.bigIntegerValue().divide(term2.bigIntegerValue()));
+        try {
+            return IntToken.of(term1.bigIntegerValue().divide(term2.bigIntegerValue()));
+        } catch (ArithmeticException e) {
+            return null;
+        }
     }
 
     public static IntToken rem(IntToken term1, IntToken term2, TermContext context) {
-        return IntToken.of(term1.bigIntegerValue().remainder(term2.bigIntegerValue()));
+        try {
+            return IntToken.of(term1.bigIntegerValue().remainder(term2.bigIntegerValue()));
+        } catch (ArithmeticException e) {
+            return null;
+        }
     }
 
     public static IntToken mod(IntToken term1, IntToken term2, TermContext context) {
@@ -97,6 +107,15 @@ public class BuiltinIntOperations {
 
     public static BoolToken le(IntToken term1, IntToken term2, TermContext context) {
         return BoolToken.of(term1.bigIntegerValue().compareTo(term2.bigIntegerValue()) <= 0);
+    }
+
+    private static Random randomGenerator = new Random();
+
+    public static IntToken rand(IntToken upperBound, TermContext context) {
+        if (upperBound.bigIntegerValue().compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0) {
+            return null;
+        }
+        return IntToken.of(randomGenerator.nextInt(upperBound.intValue()));
     }
 
 }

@@ -5,23 +5,12 @@ import org.kframework.backend.java.builtins.BoolToken;
 import org.kframework.backend.java.builtins.MetaK;
 import org.kframework.backend.java.builtins.SortMembership;
 import org.kframework.backend.java.rewritemachine.KAbstractRewriteMachine;
-import org.kframework.backend.java.symbolic.BuiltinFunction;
-import org.kframework.backend.java.symbolic.ConjunctiveFormula;
-import org.kframework.backend.java.symbolic.JavaExecutionOptions;
-import org.kframework.backend.java.symbolic.Matcher;
-import org.kframework.backend.java.symbolic.NonACPatternMatcher;
-import org.kframework.backend.java.symbolic.RuleAuditing;
-import org.kframework.backend.java.symbolic.SymbolicRewriter;
-import org.kframework.backend.java.symbolic.SymbolicUnifier;
-import org.kframework.backend.java.symbolic.Transformer;
-import org.kframework.backend.java.symbolic.Unifier;
-import org.kframework.backend.java.symbolic.Visitor;
+import org.kframework.backend.java.symbolic.*;
 import org.kframework.backend.java.util.ImpureFunctionException;
 import org.kframework.backend.java.util.Profiler;
 import org.kframework.backend.java.util.Subsorts;
 import org.kframework.backend.java.util.Utils;
 import org.kframework.kil.*;
-import org.kframework.kore.KApply;
 import org.kframework.main.GlobalOptions;
 import org.kframework.main.Tool;
 import org.kframework.utils.errorsystem.KException.ExceptionType;
@@ -123,21 +112,8 @@ public class KItem extends Term implements KItemRepresentation {
             KLabelConstant kLabelConstant = (KLabelConstant) kLabel;
 
             /* at runtime, checks if the result has been cached */
-            CacheTableColKey cacheTabColKey = null;
-            CacheTableValue cacheTabVal = null;
             enableCache = (tool != Tool.KOMPILE)
                     && definition.sortPredicateRulesOn(kLabelConstant).isEmpty();
-            if (enableCache) {
-                cacheTabColKey = new CacheTableColKey(kLabelConstant, (KList) kList);
-                cacheTabVal = definition.getSortCacheTable().get(cacheTabColKey);
-                if (cacheTabVal != null) {
-                    sort = cacheTabVal.sort;
-                    isExactSort = cacheTabVal.isExactSort;
-                    possibleSorts = cacheTabVal.possibleSorts;
-                    this.termContext = null;
-                    return;
-                }
-            }
 
             sort = null;
             isExactSort = false;
@@ -164,6 +140,19 @@ public class KItem extends Term implements KItemRepresentation {
             //computed already
             return;
         }
+        if (enableCache) {
+            CacheTableColKey cacheTabColKey = null;
+            CacheTableValue cacheTabVal = null;
+            cacheTabColKey = new CacheTableColKey((KLabelConstant) kLabel, (KList) kList);
+            cacheTabVal = termContext.definition().getSortCacheValue(cacheTabColKey);
+            if (cacheTabVal != null) {
+                sort = cacheTabVal.sort;
+                isExactSort = cacheTabVal.isExactSort;
+                possibleSorts = cacheTabVal.possibleSorts;
+                this.termContext = null;
+                return;
+            }
+        }
         KLabelConstant kLabelConstant = (KLabelConstant) kLabel;
         KList kList = (KList) this.kList;
         Definition definition = termContext.definition();
@@ -186,8 +175,8 @@ public class KItem extends Term implements KItemRepresentation {
             if (MetaK.matchable(kList, rule.sortPredicateArgument().kList(), termContext)
                     .equals(BoolToken.TRUE)) {
                 sorts.add(rule.predicateSort());
-            } else if (MetaK.unifiable(kList, rule.sortPredicateArgument().kList(), termContext)
-                    .equals(BoolToken.TRUE)) {
+            } else if (BoolToken.TRUE.equals(MetaK.unifiable(
+                    kList, rule.sortPredicateArgument().kList(), termContext))) {
                 possibleSorts.add(rule.predicateSort());
             }
         }
@@ -240,7 +229,9 @@ public class KItem extends Term implements KItemRepresentation {
         Sort sort = sorts.isEmpty() ? kind.asSort() : subsorts.getGLBSort(sorts);
         if (sort == null) {
             throw KExceptionManager.criticalError("Cannot compute least sort of term: " +
-                            this.toString() + "\nPossible least sorts are: " + sorts);
+                            this.toString() + "\nPossible least sorts are: " + sorts +
+                            "\nAll terms must have a unique least sort; " +
+                            "consider assigning unique KLabels to overloaded productions", this);
         }
         /* the sort is exact iff the klabel is a constructor and there is no other possible sort */
         boolean isExactSort = kLabelConstant.isConstructor() && possibleSorts.isEmpty();
@@ -253,7 +244,7 @@ public class KItem extends Term implements KItemRepresentation {
         CacheTableValue cacheTabVal = new CacheTableValue(sort, isExactSort, possibleSorts);
 
         if (enableCache) {
-            definition.getSortCacheTable().put(new CacheTableColKey(kLabelConstant, (KList) kList), cacheTabVal);
+            definition.putSortCacheValue(new CacheTableColKey(kLabelConstant, (KList) kList), cacheTabVal);
         }
     }
 
@@ -446,10 +437,31 @@ public class KItem extends Term implements KItemRepresentation {
                             } else if (RuleAuditing.isAuditBegun() && RuleAuditing.getAuditingRule() == null) {
                                 System.err.println("\nAuditing " + rule + "...\n");
                             }
-                            /* function rules should be applied by pattern match rather than unification */
-                            Map<Variable, Term> solution = NonACPatternMatcher.match(kItem, rule, context);
-                            if (solution == null) {
-                                continue;
+
+
+                            Map<Variable, Term> solution;
+                            if (rule.getAttribute(Attribute.ASSOCIATIVE_KEY) == null ||
+                                    rule.getAttribute(Attribute.COMMUTATIVE_KEY) == null) {
+                                    /* Use the non-assoc pattern matcher unless explicitely specified*/
+                                solution = NonACPatternMatcher.match(kItem, rule, context);
+                                if (solution == null) {
+                                    continue;
+                                }
+                            } else {
+                                List<Substitution<Variable, Term>> matches = PatternMatcher.match(kItem, rule, context);
+                                if (matches.isEmpty()) {
+                                    continue;
+                                } else {
+                                    if (matches.size() > 1) {
+                                        if (javaOptions.deterministicFunctions) {
+                                            throw KExceptionManager.criticalError("More than one possible match. " +
+                                                    "Function " + kLabelConstant + " might be non-deterministic.");
+                                        }
+                                        kem.registerInternalWarning("More than one possible match. " +
+                                                "Behaviors might be lost.");
+                                    }
+                                    solution = matches.get(0);
+                                }
                             }
 
                             Term rightHandSide = rule.rightHandSide();
@@ -464,7 +476,7 @@ public class KItem extends Term implements KItemRepresentation {
                                 rightHandSide = rightHandSide.substituteWithBinders(freshSubstitution, context);
                             }
                             rightHandSide = KAbstractRewriteMachine.construct(rule.rhsInstructions(), solution, copyOnShareSubstAndEval ? rule.reusableVariables().elementSet() : null,
-                                        context, false);
+                                    context, false);
 
                             if (rule.containsAttribute("owise")) {
                                 if (owiseResult != null) {
@@ -474,8 +486,9 @@ public class KItem extends Term implements KItemRepresentation {
                                 owiseResult = rightHandSide;
                             } else {
                                 if (tool == Tool.KRUN) {
-                                    assert result == null || result.equals(rightHandSide):
-                                        "[non-deterministic function definition]: more than one rule can apply to the function\n" + kItem;
+                                    if (result != null && !result.equals(rightHandSide)) {
+                                        throw KExceptionManager.criticalError("[non-deterministic function definition]: more than one rule can apply to the function\n" + kItem);
+                                    }
                                 }
                                 RuleAuditing.succeed(rule);
                                 result = rightHandSide;

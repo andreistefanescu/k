@@ -25,24 +25,32 @@ trait MatcherLabel extends KRegularAppLabel with EmptyAtt with KProduct2Label {
 trait KAppMatcher extends Matcher {
   def matchContents(ksL: Seq[K], ksR: Seq[K])(implicit theory: Theory): K
 
-  override def normalize(implicit theory: Theory): K =
-    (left.normalize, right.normalize) match {
+  override def normalizeInner(implicit theory: Theory): K = {
+    val x = (left.normalize, right.normalize) match {
       case (KApp(labelVariable: KVar, contentsP, _), KApp(label2, contents, _)) =>
         And(Binding(labelVariable, InjectedLabel(label2, Att())), matchContents(contentsP, contents).normalize)
       case (KApp(label, contentsP, att), KApp(label2, contents, att2)) if label == label2 =>
         matchContents(contentsP, contents).normalize
       case (KApp(label, contentsP, att), k) if this.isInstanceOf[KAssocAppMatcher] => // ugly instanceOf
         matchContents(contentsP, Seq(k)).normalize
-      case _ => False
+      case _ =>
+        False
     }
+    x
+  }
+
 }
 
 case class KRegularAppMatcher(left: KRegularApp, right: K) extends KAppMatcher {
   val klabel = KRegularAppMatcher
 
   def matchContents(ksL: Seq[K], ksR: Seq[K])(implicit theory: Theory): K =
-    And(ksL.zip(ksR) map { case (k1, k2) => k1.matcher(k2) }: _*)
+    And(ksL.zip(ksR) map {case (k1, k2) => k1.matcher(k2) }: _*)
 
+  override def isFalse = (left, right) match {
+    case (KApp(label, _, _), KApp(label2, _, _)) => label != label2
+    case _ => false
+  }
 }
 
 object KRegularAppMatcher extends MatcherLabel {
@@ -50,24 +58,39 @@ object KRegularAppMatcher extends MatcherLabel {
     KRegularAppMatcher(k1.asInstanceOf[KRegularApp], k2)
 }
 
-case class KAssocAppMatcher(left: KAssocApp, right: K) extends KAppMatcher {
+trait AssocMatchContents {
+  val leftKLabel: Label
+  val rightAtt: Att
+
+  def matchContents(ksL: Seq[K], ksR: Seq[K])(implicit theory: Theory): K = {
+    val res = (ksL, ksR) match {
+      case (Seq(), Seq()) => Or(True)
+      case (headL +: tailL, headR +: tailR) if theory.equals(headL, headR) => matchContents(tailL, tailR)
+      case (headL +: tailL, ksR) =>
+        (0 to ksR.size)
+          .map {index => (ksR.take(index), ksR.drop(index)) }
+          .map {
+          case (List(oneElement), suffix) =>
+            And(headL.matcher(oneElement), matchContents(tailL, suffix))
+          case (prefix, suffix) =>
+            And(headL.matcher(leftKLabel(prefix, rightAtt)), matchContents(tailL, suffix))
+        }
+          .fold(False: K)({(a, b) => Or(a, b) })
+
+      case other => False
+    }
+    res
+  }
+}
+
+case class KAssocAppMatcher(left: KAssocApp, right: K) extends KAppMatcher with AssocMatchContents {
   val klabel = KAssocAppMatcher
+  val leftKLabel = left.klabel
 
-  def matchContents(ksL: Seq[K], ksR: Seq[K])(implicit theory: Theory): K = (ksL, ksR) match {
-    case (List(), List()) => Or(True)
-    case (headL +: tailL, headR +: tailR) if theory.equals(headL, headR) => matchContents(tailL, tailR)
-    case (headL +: tailL, ksR) =>
-      (0 to ksR.size)
-        .map { index => (ksR.take(index), ksR.drop(index)) }
-        .map {
-        case (List(oneElement), suffix) =>
-          And(headL.matcher(oneElement), matchContents(tailL, suffix))
-        case (prefix, suffix) =>
-          And(headL.matcher(left.klabel(prefix, right.att)), matchContents(tailL, suffix))
-      }
-        .fold(False)({ (a, b) => Or(a, b) })
-
-    case other => False
+  val rightAtt = right.att
+  override def isFalse = (left, right) match {
+    case (KApp(label, Seq(), _), KApp(label2, Seq(), _)) => label != label2
+    case _ => false
   }
 }
 
@@ -81,7 +104,7 @@ case class KVarMatcher(left: KVar, right: K) extends Matcher {
 
   assert(!right.isInstanceOf[KVar])
 
-  override def normalize(implicit theory: Theory): K =
+  override def normalizeInner(implicit theory: Theory): K =
     Binding(left, right.normalize)
 
 }
@@ -95,8 +118,15 @@ case class EqualsMatcher(left: K, right: K) extends Matcher {
   override val klabel = EqualsMatcher
   override def toString = left + ":=" + right
 
-  override def normalize(implicit theory: Theory) = {
-    theory.normalize(this)
+  override protected[this] def normalizeInner(implicit theory: Theory): K = {
+    val res = if (left == right)
+      True
+    else if (isGround && left != right)
+      False
+    else
+      this
+
+    res
   }
 }
 

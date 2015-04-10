@@ -18,6 +18,19 @@ public final class GlobalOptions {
     @Inject
     public GlobalOptions(Void v) {}
 
+    public GlobalOptions(boolean debug, Warnings warnings, boolean verbose) {
+        this.debug = debug;
+        this.warnings = warnings;
+        this.verbose = verbose;
+    }
+
+    public GlobalOptions(boolean debug, Warnings warnings, boolean verbose, boolean warnings2errors) {
+        this.debug = debug;
+        this.warnings = warnings;
+        this.verbose = verbose;
+        this.warnings2errors = warnings2errors;
+    }
+
     public static enum Warnings {
         /**
          * All warnings and errors
@@ -73,4 +86,7 @@ public final class GlobalOptions {
 
     @Parameter(names={"--warnings", "-w"}, converter=WarningsConverter.class, description="Warning level. Values: [all|normal|none]")
     public Warnings warnings = Warnings.NORMAL;
+
+    @Parameter(names={"--warnings-to-errors", "-w2e"}, description="Convert warnings to errors.")
+    public boolean warnings2errors = false;
 }

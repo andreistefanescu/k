@@ -1,24 +1,75 @@
 package org.kframework.tiny
 
-object Rule {
-  def apply(termWithRewrite: K, sideConditions: K = True)(implicit theory: Theory = FreeTheory): Rule = {
-    val left = RewriteToTop.toLeft(termWithRewrite)
-    val right = RewriteToTop.toRight(termWithRewrite)
+import org.kframework.tiny.builtin.Bag
 
-    def substitute(and: And, t: K): K = {
-      assert(and.isPureSubsitution,
-        "Invalid substitution when applying " + left + " to " + t + ":\n" + and)
-      Substitution(right).substitute(and.binding)
-    }
+trait Rule extends (K => Set[K])
 
-    (t: K) => {
-      val pmSolutions = And(left.matcher(t), sideConditions).normalize
-      pmSolutions match {
-        case Or(children, _, _) => children map {
-          case and: And => substitute(and, t)
-        }
-        case and: And => Set(substitute(and, t))
-      }
+trait FromKDef {
+  val termWithRewrite: K
+  val sideConditions: K
+  implicit val theory: Theory
+
+  val left = RewriteToTop.toLeft(termWithRewrite)
+  val right = RewriteToTop.toRight(termWithRewrite)
+
+  override def toString = "===[ rl " + termWithRewrite + " ]===>"
+
+  var count = 0
+
+  def substitute(and: K, t: K): K = {
+    assert(and.isPureSubsitution,
+      "Invalid substitution when applying " + left + " to " + t + ":\n" + and)
+    Substitution(right).substitute(and.binding)
+  }
+
+  def matchTerm(t: K) = And(left.matcher(t), sideConditions).normalize
+}
+
+case class RegularRule(termWithRewrite: K, sideConditions: K)(implicit val theory: Theory)
+  extends Rule with FromKDef {
+  def apply(t: K) = {
+    val pmSolutions = matchTerm(t)
+    AsOr(pmSolutions).children map { count += 1; substitute(_, t).normalize }
+  }
+}
+
+case class AnywhereRule(termWithRewrite: K, sideConditions: K)(implicit val theory: Theory)
+  extends Rule with FromKDef {
+
+  val regularRule = RegularRule(termWithRewrite, sideConditions)
+
+  val ignorePrefixVar = KVar("IGNORED_PREFIX")
+  val ignoreSuffixVar = KVar("IGNORED_SUFFIX")
+
+  def recursiveResults(t: K): Set[K] = (left, t) match {
+    case (left: Bag, kapp: Bag) if kapp.klabel == left.klabel =>
+      val ruleWithJustOneSide = RegularRule(kapp.klabel(ignorePrefixVar, termWithRewrite), sideConditions)
+      process(kapp) | ruleWithJustOneSide(t)
+
+    case (left: KAssocApp, kapp: KAssocApp) if kapp.klabel == left.klabel => {
+      val ruleWithSides = RegularRule(kapp.klabel(ignorePrefixVar, termWithRewrite, ignoreSuffixVar), sideConditions)
+      process(kapp) | ruleWithSides(t)
     }
+    case (left: K, kapp: KApp) => process(kapp) | regularRule(t)
+    case other => regularRule(t)
+  }
+
+  def process(kapp: KApp): Set[K] = {
+    kapp.children
+      .map(recursiveResults)
+      .foldLeft(Set(Seq[K]())) {(soFar, nextArg) => soFar flatMap {args => nextArg map { args :+ _ } } }
+      .map { kapp.klabel(_: _*) }
+  }
+
+  def apply(t: K) = {
+    recursiveResults(t)
+  }
+}
+
+case class ExecuteRule(termWithRewrite: K, sideConditions: K = True)(implicit val theory: Theory)
+  extends Rule with FromKDef {
+  def apply(t: K) = {
+    val pmSolutions = matchTerm(t)
+    AsOr(pmSolutions).children.headOption map { count += 1; substitute(_, t).normalize } toSet
   }
 }

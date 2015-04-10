@@ -2,15 +2,17 @@
 
 module TEST
   syntax K ::= KItem
-  syntax KItem ::= KResult
   syntax KResult
+  syntax KItem ::= Id
 
   syntax HOLE ::= "[]"   [klabel('HOLE)]
 //  syntax UserList ::= KItem "," KItem    [klabel('_,_), assoc]
 //  syntax UserList ::= KItem              [klabel('.EmptyUserList)]
 
-  syntax Bool ::= Token{"true"}
-  syntax Bool ::= Token{"false"}
+  syntax KSequence ::= K "~>" K   [ klabel(~>), left, assoc, unit(#EmptyK), hook(org.kframework.koreimplementation.KSequence) ]
+
+  syntax Bool ::= "true"           [klabel('_andBool_), function, hook(#BOOL:_andBool_)]
+  syntax Bool ::= "false"          [klabel('_orBool_), function, hook(#BOOL:_orBool_)]
   syntax Int ::= Token{[\-\+]? [0-9]+}     [regex("[\\+-]?\\d+"), prefer]
   syntax Id ::= Token{[A-Za-z\_][A-Za-z0-9\_]*}     [notInRules, regex("(?<![A-Za-z0-9\\_])[A-Za-z\\_][A-Za-z0-9\\_]*")]
 
@@ -21,7 +23,6 @@ module TEST
   syntax Bool ::= K "=/=K" K        [klabel('_=/=K_), function, hook(#K-EQUAL:_=/=K_), left]
 
   syntax priority '_==K_ '_=/=K_ > 'notBool_ > '_andBool_
-
 
   syntax Int ::= Int "+Int" Int     [klabel('_+Int_), function, hook(#INT:_+Int_), left]
   syntax Int ::= Int "-Int" Int     [klabel('_-Int_), function, hook(#INT:_-Int_), left]
@@ -37,13 +38,13 @@ module TEST
   syntax priority '_*Int_ '_/Int_ '_%Int_ > '_+Int_ '_-Int_
 
   syntax Int ::= "freshInt" "(" Int ")" [klabel('freshInt), function, freshGenerator]
-  rule 'freshInt(I:Int) => I:Int
+//  rule 'freshInt(I:Int) => I:Int
 
 
   syntax Map ::= Map Map        [klabel('_Map_), function, hook(Map:__)]
-  syntax Map ::= ".Map"         [klabel('.Map),  function, hook(Map:.Map)]
+  syntax Map ::= ".Map"         [klabel('_Map_),  function, hook(Map:.Map)]
   syntax Map ::= K "|->" K      [klabel('_|->_), function, hook(Map:_|->_)]
-  syntax priorities '_|->_ > '_Map_ '.Map
+  syntax priorities '_|->_ > '_Map_
 
   syntax Set ::= "keys" "(" Map ")"     [klabel('keys), function, hook(Map:keys)]
   syntax Bool ::= K "in" Set            [klabel('_in_), function, hook(Set:in)]
@@ -97,6 +98,7 @@ module TEST
   syntax KResult ::= Bool
   syntax KResult ::= Int
   syntax Bool ::= "isKResult" "(" KItem ")"     [klabel(isKResult), function]
+  syntax Bool ::= "isInt" "(" KItem ")"     [klabel(isKResult), function]
 
 
   // AExp
@@ -163,11 +165,11 @@ module TEST
   rule
     '<top>('<k>('while__(BE:BExp,, S:Stmt)                                                       ~> K:K),, SC:StateCell)
   =>
-    '<top>('<k>('if__else_(BE:BExp,, 'block_('while__(BE:BExp,, S:Stmt)),, 'empty-block(.KList)) ~> K:K),, SC:StateCell)
+    '<top>('<k>('if__else_(BE:BExp,, 'block_(S 'while__(BE:BExp,, S:Stmt)),, 'empty-block(.KList)) ~> K:K),, SC:StateCell)
 
   // Pgm
   rule
-    '<top>('<k>('int_;_('_`,_(X:Id,, Xs:Ids),, S:Stmt) ~> K:K),, '<state>('_Map_(Rho:Map,, '.Map(.KList))))
+    '<top>('<k>('int_;_('_`,_(X:Id,, Xs:Ids),, S:Stmt) ~> K:K),, '<state>('_Map_(Rho:Map,, '_Map_(.KList))))
   =>
     '<top>('<k>('int_;_(Xs:Ids,,               S:Stmt) ~> K:K),, '<state>('_Map_(Rho:Map,, '_|->_(X:Id,, 0))))
   when 'notBool_('_in_(X:Id,, 'keys(Rho:Map)))
@@ -175,6 +177,20 @@ module TEST
     '<top>('<k>('int_;_(.Ids,, S:Stmt) ~> K:K),, SC:StateCell)
   =>
     '<top>('<k>(S:Stmt                 ~> K:K),, SC:StateCell)
+
+
+  rule
+    '<top>('<k>('if__else_(C:BExp,,  S:Stmt,, _:Stmt) ~> K:K),, SC:StateCell)
+  =>
+    '<top>('<k>(C ~> 'if__else_([],,  S:Stmt,, _:Stmt) ~> K:K),, SC:StateCell)
+    when 'notBool_(isKResult(C))
+  [heat]
+
+  rule
+      '<top>('<k>(C:KResult ~> 'if__else_([],,  S:Stmt,, _:Stmt) ~> K:K),, SC:StateCell)
+    =>
+      '<top>('<k>('if__else_(C,,  S:Stmt,, _:Stmt) ~> K:K),, SC:StateCell)
+  [cool]
 
   // '_/_
   rule
@@ -187,6 +203,7 @@ module TEST
     '<top>('<k>(K1:KResult ~> '_/_([],,K2:KItem) ~> K:K),, SC:StateCell)
   =>
     '<top>('<k>('_/_(K1:KResult,, K2:KItem)     ~> K:K),, SC:StateCell)
+  when isKResult(K1)
   //[cool]
   rule
     '<top>('<k>('_/_(K1:KItem,, K2:KItem)     ~> K:K),, SC:StateCell)
@@ -198,6 +215,75 @@ module TEST
     '<top>('<k>(K2:KResult ~> '_/_(K1:KItem,,[]) ~> K:K),, SC:StateCell)
   =>
     '<top>('<k>('_/_(K1:KItem,, K2:KResult)     ~> K:K),, SC:StateCell)
+  when isKResult(K2)
+  //[cool]
+
+
+  // '_+_
+  rule
+    '<top>('<k>('_+_(K1:KItem,, K2:KItem)     ~> K:K),, SC:StateCell)
+  =>
+    '<top>('<k>(K1:KItem ~> '_+_([],,K2:KItem) ~> K:K),, SC:StateCell)
+  when 'notBool_(isKResult(K1:KItem))
+  [heat]
+  rule
+    '<top>('<k>(K1:KResult ~> '_+_([],,K2:KItem) ~> K:K),, SC:StateCell)
+  =>
+    '<top>('<k>('_+_(K1:KResult,, K2:KItem)     ~> K:K),, SC:StateCell)
+  when isKResult(K1)
+  //[cool]
+  rule
+    '<top>('<k>('_+_(K1:KItem,, K2:KItem)     ~> K:K),, SC:StateCell)
+  =>
+    '<top>('<k>(K2:KItem ~> '_+_(K1:KItem,,[]) ~> K:K),, SC:StateCell)
+  when 'notBool_(isKResult(K2:KItem))
+  [heat]
+  rule
+    '<top>('<k>(K2:KResult ~> '_+_(K1:KItem,,[]) ~> K:K),, SC:StateCell)
+  =>
+    '<top>('<k>('_+_(K1:KItem,, K2:KResult)     ~> K:K),, SC:StateCell)
+  when isKResult(K2)
+  //[cool]
+
+
+  // '_<=_
+  rule
+    '<top>('<k>('_<=_(K1:KItem,, K2:KItem)     ~> K:K),, SC:StateCell)
+  =>
+    '<top>('<k>(K1:KItem ~> '_<=_([],,K2:KItem) ~> K:K),, SC:StateCell)
+  when 'notBool_(isKResult(K1:KItem))
+  [heat]
+  rule
+    '<top>('<k>(K1:KResult ~> '_<=_([],,K2:KItem) ~> K:K),, SC:StateCell)
+  =>
+    '<top>('<k>('_<=_(K1:KResult,, K2:KItem)     ~> K:K),, SC:StateCell)
+  when isKResult(K1)
+  //[cool]
+  rule
+    '<top>('<k>('_<=_(K1:KItem,, K2:KItem)     ~> K:K),, SC:StateCell)
+  =>
+    '<top>('<k>(K2:KItem ~> '_<=_(K1:KItem,,[]) ~> K:K),, SC:StateCell)
+  when 'notBool_(isKResult(K2:KItem))
+  [heat]
+  rule
+    '<top>('<k>(K2:KResult ~> '_<=_(K1:KItem,,[]) ~> K:K),, SC:StateCell)
+  =>
+    '<top>('<k>('_<=_(K1:KItem,, K2:KResult)     ~> K:K),, SC:StateCell)
+  when isKResult(K2)
+  //[cool]
+
+  // '_=_;
+  rule
+    '<top>('<k>('_=_;(V:KItem,,E) ~> K:K),, SC:StateCell)
+  =>
+    '<top>('<k>(E ~> '_=_;(V,,[]) ~> K:K),, SC:StateCell)
+  when 'notBool_(isKResult(E))
+  [heat]
+  rule
+    '<top>('<k>(R:KResult ~> '_=_;(V:KItem,,[]) ~> K:K),, SC:StateCell)
+  =>
+    '<top>('<k>('_=_;(V,, R) ~> K:K),, SC:StateCell)
+  when isKResult(R)
   //[cool]
 
 endmodule
