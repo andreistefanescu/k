@@ -26,6 +26,7 @@ import org.kframework.krun.api.KRunState;
 import org.kframework.krun.api.SearchType;
 import org.kframework.utils.errorsystem.KExceptionManager.KEMException;
 
+import java.math.BigInteger;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -140,6 +141,7 @@ public class SymbolicRewriter {
     }
 
     private void computeRewriteStep(ConstrainedTerm subject, int successorBound) {
+        subject.termContext().setTopTerm(subject.term());
         results.clear();
         appliedRules.clear();
         substitutions.clear();
@@ -159,7 +161,7 @@ public class SymbolicRewriter {
             while (strategy.hasNext()) {
                 transition = strategy.nextIsTransition();
                 HashSet<Rule> rules = Sets.newHashSet(strategy.next());
-                //rules.removeAll(disabledRules.get(subject));
+                rules.removeAll(disabledRules.get(subject));
 
                 ArrayList<Rule> failedRules = Lists.newArrayList();
                 ArrayList<Pair<ConstrainedTerm, Rule>> internalResults = Lists.newArrayList();
@@ -292,6 +294,7 @@ public class SymbolicRewriter {
         constraint = constraint.orientSubstitution(rule.boundVariables().stream()
                 .map(freshSubstitution::get)
                 .collect(Collectors.toSet()));
+        constraint.termContext().setTopConstraint(constraint);
         term = term.substituteAndEvaluate(constraint.substitution(), constraint.termContext());
         /* eliminate bindings of rule variables */
         constraint = constraint.removeBindings(freshSubstitution.values());
@@ -314,7 +317,9 @@ public class SymbolicRewriter {
             ruleStopwatch.start();
 
             ConstrainedTerm leftHandSideTerm = buildPattern(rule, constrainedTerm.termContext());
-            ConjunctiveFormula constraint = constrainedTerm.matchImplies(leftHandSideTerm);
+            ConjunctiveFormula constraint = constrainedTerm.matchImplies(
+                    leftHandSideTerm,
+                    !rule.containsAttribute("no-pattern-expansion"));
             if (constraint == null) {
                 continue;
             }
@@ -490,6 +495,7 @@ public class SymbolicRewriter {
             ConstrainedTerm initialTerm,
             ConstrainedTerm targetTerm,
             List<Rule> rules) {
+        initialTerm.termContext().setCounter(BigInteger.valueOf(1000));
         rw.reset();
         totalRules = 0;
         kRules = 0;

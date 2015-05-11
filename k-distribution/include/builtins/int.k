@@ -27,14 +27,14 @@ module INT-HOOKS
                  Int "+Int" Int                 [function, left, smtlib(+), latex({#1}\mathrel{+_{\scriptstyle\it Int}}{#2}), hook(#INT:_+Int_)]
                | Int "-Int" Int                 [function, left, smtlib(-), latex({#1}\mathrel{-_{\scriptstyle\it Int}}{#2}), hook(#INT:_-Int_)]
                > left:
-                 Int ">>Int" Int                [function, left, latex({#1}\mathrel{\gg_{\scriptstyle\it Int}}{#2}), hook(#INT:_>>Int_)]
-               | Int "<<Int" Int                [function, left, latex({#1}\mathrel{\ll_{\scriptstyle\it Int}}{#2}), hook(#INT:_<<Int_)]
+                 Int ">>Int" Int                [function, left, smtlib(int_shr), latex({#1}\mathrel{\gg_{\scriptstyle\it Int}}{#2}), hook(#INT:_>>Int_)]
+               | Int "<<Int" Int                [function, left, smtlib(int_shl), latex({#1}\mathrel{\ll_{\scriptstyle\it Int}}{#2}), hook(#INT:_<<Int_)]
                > left:
                  Int "&Int" Int                 [function, left, smtlib(int_and), latex({#1}\mathrel{\&_{\scriptstyle\it Int}}{#2}), hook(#INT:_&Int_)]
                > left:
                  Int "xorInt" Int               [function, left, latex({#1}\mathrel{\oplus_{\scriptstyle\it Int}}{#2}), hook(#INT:_xorInt_)]
                > left:
-                 Int "|Int" Int                 [function, left, latex({#1}\mathrel{|_{\scriptstyle\it Int}}{#2}), hook(#INT:_|Int_)]
+                 Int "|Int" Int                 [function, left, smtlib(int_or), latex({#1}\mathrel{|_{\scriptstyle\it Int}}{#2}), hook(#INT:_|Int_)]
                > "minInt" "(" Int "," Int ")"   [function, smtlib(int_min), hook(#INT:minInt)]
                | "maxInt" "(" Int "," Int ")"   [function, smtlib(int_max), hook(#INT:maxInt)]
                | "absInt" "(" Int ")"           [function, smtlib(int_abs), klabel(absInt), hook(#INT:absInt)]

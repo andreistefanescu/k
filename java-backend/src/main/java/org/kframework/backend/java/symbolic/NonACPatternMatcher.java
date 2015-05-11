@@ -130,6 +130,14 @@ public class NonACPatternMatcher {
             crntTask = tasks.pop();
             Term subject = crntTask.getLeft();
             Term pattern = crntTask.getRight();
+            if (subject.isGround() && pattern.isGround()
+                    && subject.isNormal() && pattern.isNormal()) {
+                check(subject.equals(pattern), subject, pattern);
+                if (failed) {
+                    return false;
+                }
+                continue;
+            }
 
             if (pattern instanceof Variable) {
                 Variable variable = (Variable) pattern;

@@ -181,6 +181,18 @@ public class IndexingTable implements Serializable, RuleIndex {
     private List<Rule> getRulesFromCfgTermIdx(ConfigurationTermIndex cfgTermIdx) {
         List<Rule> rules = Lists.newArrayList();
 
+        for (IndexingPair pair : cfgTermIdx.getKCellIndexingPairs()) {
+            if (ruleTable.get(pair.first) != null) {
+                rules.addAll(ruleTable.get(pair.first));
+            }
+            if (heatingRuleTable.get(pair.first) != null) {
+                rules.addAll(heatingRuleTable.get(pair.first));
+            }
+            if (coolingRuleTable.get(pair.second) != null) {
+                rules.addAll(coolingRuleTable.get(pair.second));
+            }
+        }
+
         /* give priority to IO rules */
         for (IndexingPair pair : cfgTermIdx.getInstreamIndexingPairs()) {
             if (instreamRuleTable.get(pair.second) != null) {
@@ -199,18 +211,6 @@ public class IndexingTable implements Serializable, RuleIndex {
                         rules.add(rule);
                     }
                 }
-            }
-        }
-
-        for (IndexingPair pair : cfgTermIdx.getKCellIndexingPairs()) {
-            if (ruleTable.get(pair.first) != null) {
-                rules.addAll(ruleTable.get(pair.first));
-            }
-            if (heatingRuleTable.get(pair.first) != null) {
-                rules.addAll(heatingRuleTable.get(pair.first));
-            }
-            if (coolingRuleTable.get(pair.second) != null) {
-                rules.addAll(coolingRuleTable.get(pair.second));
             }
         }
 

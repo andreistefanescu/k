@@ -4,6 +4,7 @@ package org.kframework.backend.java.kil;
 import org.kframework.attributes.Att;
 import org.kframework.backend.java.indexing.IndexingPair;
 import org.kframework.backend.java.symbolic.BottomUpVisitor;
+import org.kframework.backend.java.symbolic.ConjunctiveFormula;
 import org.kframework.backend.java.symbolic.CopyOnShareSubstAndEvalTransformer;
 import org.kframework.backend.java.symbolic.Evaluator;
 import org.kframework.backend.java.symbolic.Matchable;

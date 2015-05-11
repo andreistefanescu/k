@@ -89,7 +89,7 @@ public class ConstrainedTerm extends JavaSymbolicObject {
     }
 
     public boolean implies(ConstrainedTerm constrainedTerm) {
-        return matchImplies(constrainedTerm) != null;
+        return matchImplies(constrainedTerm, true) != null;
     }
 
     public ConstrainedTerm expandPatterns(boolean narrowing) {
@@ -116,7 +116,7 @@ public class ConstrainedTerm extends JavaSymbolicObject {
      * occurring only in the given constrained term (but not in this constrained term) are
      * existentially quantified.
      */
-    public ConjunctiveFormula matchImplies(ConstrainedTerm constrainedTerm) {
+    public ConjunctiveFormula matchImplies(ConstrainedTerm constrainedTerm, boolean expand) {
         ConjunctiveFormula constraint = ConjunctiveFormula.of(constrainedTerm.termContext())
                 .add(data.constraint.substitution())
                 .add(data.term, constrainedTerm.data.term)
@@ -133,10 +133,15 @@ public class ConstrainedTerm extends JavaSymbolicObject {
             return null;
         }
 
-        constraint = constraint.expandPatterns(false).simplifyModuloPatternFolding();
-        if (constraint.isFalse()) {
-            return null;
+        if (expand) {
+            constraint = constraint.expandPatterns(false).simplifyModuloPatternFolding();
+            if (constraint.isFalse()) {
+                return null;
+            }
         }
+
+        constraint.termContext().setTopConstraint(data.constraint);
+        constraint = (ConjunctiveFormula) constraint.evaluate(constraint.termContext());
 
         Set<Variable> rightOnlyVariables = Sets.difference(constraint.variableSet(), variableSet());
         constraint = constraint.orientSubstitution(rightOnlyVariables);
@@ -146,6 +151,7 @@ public class ConstrainedTerm extends JavaSymbolicObject {
 
         ConjunctiveFormula leftHandSide = data.constraint;
         ConjunctiveFormula rightHandSide = constraint.removeBindings(rightOnlyVariables);
+        rightHandSide = (ConjunctiveFormula) rightHandSide.substitute(leftHandSide.substitution(), context);
         if (!leftHandSide.implies(rightHandSide, rightOnlyVariables)) {
             return null;
         }
@@ -166,7 +172,7 @@ public class ConstrainedTerm extends JavaSymbolicObject {
      */
     public List<ConjunctiveFormula> unify(ConstrainedTerm constrainedTerm) {
         /* unify the subject term and the pattern term without considering those associated constraints */
-        ConjunctiveFormula constraint = ConjunctiveFormula.of(constrainedTerm.termContext())
+        ConjunctiveFormula constraint = ConjunctiveFormula.of(termContext())
                 .add(term(), constrainedTerm.term())
                 .simplify();
         if (constraint.isFalse()) {
