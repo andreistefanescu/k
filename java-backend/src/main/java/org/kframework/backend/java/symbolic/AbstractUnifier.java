@@ -18,6 +18,7 @@ import org.kframework.backend.java.kil.Term;
 import org.kframework.backend.java.kil.TermContext;
 import org.kframework.backend.java.kil.Token;
 import org.kframework.backend.java.kil.Variable;
+import org.kframework.backend.java.util.Profiler;
 import org.kframework.utils.errorsystem.KEMException;
 
 import java.util.ArrayDeque;
@@ -67,6 +68,7 @@ public abstract class AbstractUnifier implements Unifier {
     }
 
     private final Deque<Pair<Term, Term>> tasks = new ArrayDeque<>();
+    private final Deque<Pair<Term, Term>> taskBuffer = new ArrayDeque<>();
 
     protected boolean failed = false;
 
@@ -75,7 +77,7 @@ public abstract class AbstractUnifier implements Unifier {
     protected TermContext termContext;
 
     void addUnificationTask(Term term, Term otherTerm) {
-        tasks.addFirst(Pair.of(term, otherTerm));
+        taskBuffer.push(Pair.of(term, otherTerm));
     }
 
     /**
@@ -87,6 +89,10 @@ public abstract class AbstractUnifier implements Unifier {
      * doing.
      */
     protected boolean unify() {
+        while (!taskBuffer.isEmpty()) {
+            tasks.push(taskBuffer.pop());
+        }
+
         while (!failed && !tasks.isEmpty()) {
             Pair<Term, Term> task = tasks.pop();
             Term term = task.getLeft();
@@ -115,7 +121,13 @@ public abstract class AbstractUnifier implements Unifier {
 
             /* unify */
             if (term instanceof CellCollection && otherTerm instanceof CellCollection) {
-                unify((CellCollection) term, (CellCollection) otherTerm);
+                if (Profiler.isRunning(Profiler.PATTERN_MATCH_TIMER)) {
+                    Profiler.stopTimer(Profiler.PATTERN_MATCH_TIMER);
+                    unify((CellCollection) term, (CellCollection) otherTerm);
+                    Profiler.startTimer(Profiler.PATTERN_MATCH_TIMER);
+                } else {
+                    unify((CellCollection) term, (CellCollection) otherTerm);
+                }
             } else if (term instanceof KItem && otherTerm instanceof KItem) {
                 unify((KItem) term, (KItem) otherTerm);
             } else if (term instanceof KLabelConstant && otherTerm instanceof KLabelConstant) {
@@ -151,6 +163,10 @@ public abstract class AbstractUnifier implements Unifier {
                 //    throw KEMException.internalError(
                 //            "unexpected type: " + term.getClass().getSimpleName());
                 //}
+            }
+
+            while (!taskBuffer.isEmpty()) {
+                tasks.push(taskBuffer.pop());
             }
         }
         return !failed;

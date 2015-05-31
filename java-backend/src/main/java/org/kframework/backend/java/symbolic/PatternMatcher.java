@@ -71,6 +71,10 @@ public class PatternMatcher extends AbstractUnifier {
                 .collect(Collectors.toList());
     }
 
+    public ConjunctiveFormula rawSubstitution() {
+        return fSubstitution;
+    }
+
     /**
      * Checks if the subject term matches the pattern.
      *
@@ -121,16 +125,17 @@ public class PatternMatcher extends AbstractUnifier {
     }
 
     /**
-     * Matches the subject term against the pattern.
-     *
-     * @param subject
-     *            the subject term
-     * @param pattern
-     *            the pattern term
-     * @return {@code true} if the matching succeeds; otherwise, {@code false}
+     * Matches the subject term against the pattern. Returns true if the matching succeeds.
      */
     public boolean patternMatch(Term subject, Term pattern) {
-        fSubstitution = ConjunctiveFormula.of(termContext);
+        return patternMatch(subject, pattern, ConjunctiveFormula.of(termContext));
+    }
+
+    /**
+     * Matches the subject term against the pattern. Returns true if the matching succeeds.
+     */
+    public boolean patternMatch(Term subject, Term pattern, ConjunctiveFormula substitution) {
+        fSubstitution = substitution;
         addUnificationTask(subject, pattern);
         return unify();
     }

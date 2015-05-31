@@ -8,6 +8,7 @@ import org.kframework.backend.java.symbolic.LocalVisitor;
 import org.kframework.backend.java.symbolic.SubstitutionTransformer;
 import org.kframework.backend.java.symbolic.Transformable;
 import org.kframework.backend.java.symbolic.Visitable;
+import org.kframework.backend.java.util.Profiler;
 import org.kframework.backend.java.util.Utils;
 import org.kframework.kil.ASTNode;
 import org.kframework.attributes.Location;
@@ -114,7 +115,10 @@ public abstract class JavaSymbolicObject extends ASTNode
      */
     public PSet<Variable> variableSet() {
         if (variableSet == null) {
+            Profiler.startTimer(Profiler.VARIABLES_UPDATE_TIMER);
             new VariableSetFieldInitializer().visitNode(this);
+            //new IterativeVariableSetFieldInitializer().visitAST(this);
+            Profiler.stopTimer(Profiler.VARIABLES_UPDATE_TIMER);
         }
         return variableSet;
     }
@@ -123,10 +127,13 @@ public abstract class JavaSymbolicObject extends ASTNode
      * Returns {@code true} if this JavaSymbolicObject does not contain any variables.
      */
     public boolean isGround() {
-        if (isGround == null) {
-            new IsGroundFieldInitializer().visitNode(this);
-        }
-        return isGround;
+        return variableSet().isEmpty();
+        //if (isGround == null) {
+        //    Profiler.startTimer(Profiler.GROUND_UPDATE_TIMER);
+        //    new IsGroundFieldInitializer().visitAST(this);
+        //    Profiler.stopTimer(Profiler.GROUND_UPDATE_TIMER);
+        //}
+        //return isGround;
     }
 
     /**

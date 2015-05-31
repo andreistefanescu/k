@@ -60,6 +60,8 @@ public class BasicVisitor implements Visitor {
             visit((ConstrainedTerm) node);
         } else if (node instanceof Rule) {
             visit((Rule) node);
+        } else if (node instanceof Bottom) {
+            visit((Bottom) node);
         } else {
             assert false : "unexpected class " + node.getClass();
         }
@@ -78,6 +80,10 @@ public class BasicVisitor implements Visitor {
     @Override
     public void visit(BoolToken boolToken) {
         visit((Token) boolToken);
+    }
+
+    public void visit(Bottom bottom) {
+        visit((Term) bottom);
     }
 
     @Override

@@ -97,6 +97,8 @@ public class Rule extends JavaSymbolicObject {
 
     private final boolean modifyCellStructure;
 
+    private final Set<Variable> matchingVariables;
+
     // TODO(YilongL): make it final
     private boolean isSortPredicate;
     private final Sort predSort;
@@ -241,6 +243,14 @@ public class Rule extends JavaSymbolicObject {
             modifyCellStructure = true;
         }
         this.modifyCellStructure = modifyCellStructure;
+
+        matchingVariables = ImmutableSet.copyOf(Sets.union(
+                !compiledForFastRewriting ?
+                        leftHandSide.variableSet() :
+                        lhsOfReadCells.values().stream().map(Term::variableSet).flatMap(Set::stream).collect(Collectors.toSet()),
+                Sets.union(
+                        lookups.variableSet(),
+                        requires.stream().map(Term::variableSet).flatMap(Set::stream).collect(Collectors.toSet()))));
     }
 
     /**
@@ -451,6 +461,10 @@ public class Rule extends JavaSymbolicObject {
      */
     public boolean modifyCellStructure() {
         return modifyCellStructure;
+    }
+
+    public Set<Variable> matchingVariables() {
+        return matchingVariables;
     }
 
     @Override

@@ -1,18 +1,12 @@
 // Copyright (c) 2013-2015 K Team. All Rights Reserved.
 package org.kframework.backend.java.symbolic;
 
-import com.google.common.base.Predicate;
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.ListMultimap;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Multimap;
-import com.google.common.collect.Multimaps;
-import com.google.common.collect.Multiset;
-import com.google.common.collect.Multisets;
-import com.google.common.collect.Sets;
 import org.kframework.backend.java.kil.*;
+import org.kframework.backend.java.util.Profiler;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -21,6 +15,13 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import com.google.common.collect.ImmutableListMultimap;
+import com.google.common.collect.ListMultimap;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Multiset;
+import com.google.common.collect.Multisets;
+import com.google.common.collect.Sets;
 
 
 /**
@@ -55,12 +56,17 @@ public final class SymbolicUnifier extends AbstractUnifier {
     }
 
     /**
-     * Unifies two given terms.
-     *
-     * @return {@code true} if the unification doesn't fail; otherwise,
-     *         {@code false}
+     * Unifies two given terms. Returns true if the unification succeeds.
      */
     public boolean symbolicUnify(Term term, Term otherTerm) {
+        return symbolicUnify(term, otherTerm, ConjunctiveFormula.of(termContext));
+    }
+
+    /**
+     * Unifies two given terms. Returns true if the unification succeeds.
+     */
+    public boolean symbolicUnify(Term term, Term otherTerm, ConjunctiveFormula constraint) {
+        this.constraint = constraint;
         addUnificationTask(term, otherTerm);
         return unify();
     }
@@ -192,8 +198,14 @@ public final class SymbolicUnifier extends AbstractUnifier {
                 || !(otherRemainingList instanceof BuiltinList && ((BuiltinList) otherRemainingList).isEmpty())) {
             if (remainingList instanceof Variable || otherRemainingList instanceof Variable || partialSimpl) {
                 add(remainingList, otherRemainingList);
+                if (failed) {
+                    return;
+                }
             } else {
                 add(list, otherList);
+                if (failed) {
+                    return;
+                }
             }
         }
     }
@@ -276,10 +288,16 @@ public final class SymbolicUnifier extends AbstractUnifier {
             if (remainingSet instanceof Variable || otherRemainingSet instanceof Variable || partialSimpl) {
                 // set equality resolved or partial simplification enabled
                 add(remainingSet, otherRemainingSet);
+                if (failed) {
+                    return;
+                }
             } else {
                 /* unable to dissolve the entire map equality; thus, we need to
                  * preserve the original set terms for pattern folding */
                 add(set, otherSet);
+                if (failed) {
+                    return;
+                }
             }
         }
     }
@@ -327,6 +345,9 @@ public final class SymbolicUnifier extends AbstractUnifier {
 
         /* made no progress */
         add(map, otherMap);
+        if (failed) {
+            return;
+        }
     }
 
     private void unifyMap(BuiltinMap map, BuiltinMap otherMap) {
@@ -419,10 +440,16 @@ public final class SymbolicUnifier extends AbstractUnifier {
             if (remainingMap instanceof Variable || otherRemainingMap instanceof Variable || partialSimpl) {
                 // map equality resolved or partial simplification enabled
                 add(remainingMap, otherRemainingMap);
+                if (failed) {
+                    return;
+                }
             } else {
                 /* unable to dissolve the entire map equality; thus, we need to
                  * preserve the original map terms for pattern folding */
                 add(map, otherMap);
+                if (failed) {
+                    return;
+                }
             }
         }
     }
@@ -453,6 +480,96 @@ public final class SymbolicUnifier extends AbstractUnifier {
             return;
         }
 
+        Definition definition = termContext.definition();
+
+        /*
+         * CASE 1: cellCollection and otherCellCollection have no explicitly specified starred-cell;
+         * therefore, no need to worry about AC-unification at all!
+         */
+        if ((!cellCollection.hasMultiplicityCell() || cellCollection.isConcreteCollection() && cellCollection.concreteSize() == 1)
+                && (!otherCellCollection.hasMultiplicityCell() || otherCellCollection.isConcreteCollection() && otherCellCollection.concreteSize() == 1)) {
+            CellCollection finalCellCollection = cellCollection;
+            CellCollection otherFinalCellCollection = otherCellCollection;
+            if (!cellCollection.hasFrame() && !otherCellCollection.hasFrame()) {
+                assert cellCollection.concreteSize() == otherCellCollection.concreteSize();
+                finalCellCollection.cells().asMap().entrySet().stream().forEach(e -> {
+                    addUnificationTask(e.getValue().iterator().next().content(),
+                            otherFinalCellCollection.get(e.getKey()).iterator().next().content());
+                });
+            } else if (!cellCollection.hasFrame()) {
+                ImmutableListMultimap.Builder<CellLabel, CellCollection.Cell> builder = ImmutableListMultimap.builder();
+                finalCellCollection.cells().asMap().entrySet().stream().forEach(e -> {
+                    Collection<CellCollection.Cell> otherCells = otherFinalCellCollection.get(e.getKey());
+                    if (!otherCells.isEmpty()) {
+                        addUnificationTask(
+                                e.getValue().iterator().next().content(),
+                                otherCells.iterator().next().content());
+                    } else {
+                        builder.put(e.getKey(), e.getValue().iterator().next());
+                    }
+                });
+                add(CellCollection.of(builder.build(), null, definition),
+                    otherFinalCellCollection.frame());
+            } else if (!otherCellCollection.hasFrame()) {
+                ImmutableListMultimap.Builder<CellLabel, CellCollection.Cell> builder = ImmutableListMultimap.builder();
+                otherFinalCellCollection.cells().asMap().entrySet().stream().forEach(e -> {
+                    Collection<CellCollection.Cell> cells = finalCellCollection.get(e.getKey());
+                    if (!cells.isEmpty()) {
+                        addUnificationTask(
+                                cells.iterator().next().content(),
+                                e.getValue().iterator().next().content());
+                    } else {
+                        builder.put(e.getKey(), e.getValue().iterator().next());
+                    }
+                });
+                add(finalCellCollection.frame(),
+                    CellCollection.of(builder.build(), null, definition));
+            } else {
+                Set<CellLabel> unifiableCellLabels = Sets.intersection(cellCollection.labelSet(), otherCellCollection.labelSet());
+                int numOfDiffCellLabels = cellCollection.labelSet().size() - unifiableCellLabels.size();
+                int numOfOtherDiffCellLabels = otherCellCollection.labelSet().size() - unifiableCellLabels.size();
+
+                for (CellLabel label : unifiableCellLabels) {
+                    assert cellCollection.get(label).size() == 1
+                            && otherCellCollection.get(label).size() == 1;
+                    addUnificationTask(
+                            cellCollection.get(label).iterator().next().content(),
+                            otherCellCollection.get(label).iterator().next().content());
+                }
+
+                Variable frame = cellCollection.hasFrame() ? cellCollection.frame() : null;
+                Variable otherFrame = otherCellCollection.hasFrame()? otherCellCollection.frame() : null;
+
+                if (frame != null && otherFrame != null && (numOfDiffCellLabels > 0) && (numOfOtherDiffCellLabels > 0)) {
+                    Variable variable = Variable.getAnonVariable(Sort.BAG);
+                    add(frame, CellCollection.of(getRemainingCellMap(otherCellCollection, unifiableCellLabels), variable, definition));
+                    if (failed) {
+                        return;
+                    }
+                    add(CellCollection.of(getRemainingCellMap(cellCollection, unifiableCellLabels), variable, definition), otherFrame);
+                    if (failed) {
+                        return;
+                    }
+                } else if (frame == null && (numOfOtherDiffCellLabels > 0)
+                        || otherFrame == null && (numOfDiffCellLabels > 0)) {
+                    fail(cellCollection, otherCellCollection);
+                    return;
+                } else if (frame == null && otherFrame == null) {
+                    if (numOfDiffCellLabels > 0 || numOfOtherDiffCellLabels > 0) {
+                        fail(cellCollection, otherCellCollection);
+                        return;
+                    }
+                } else {
+                    add(CellCollection.of(getRemainingCellMap(cellCollection, unifiableCellLabels), frame, definition),
+                            CellCollection.of(getRemainingCellMap(otherCellCollection, unifiableCellLabels), otherFrame, definition));
+                    if (failed) {
+                        return;
+                    }
+                }
+            }
+            return;
+        }
+
 //        /*
 //         * YilongL: I would like to further assert that the configuration
 //         * structure of the subject term should be concrete. However, I am not
@@ -460,45 +577,12 @@ public final class SymbolicUnifier extends AbstractUnifier {
 //         */
 //        assert !(cellCollection.hasFrame() && otherCellCollection.hasFrame());
 
-        ImmutableSet<CellLabel> unifiableCellLabels = ImmutableSet.copyOf(
-                Sets.intersection(cellCollection.labelSet(), otherCellCollection.labelSet()));
+        Set<CellLabel> unifiableCellLabels = Sets.intersection(cellCollection.labelSet(), otherCellCollection.labelSet());
         int numOfDiffCellLabels = cellCollection.labelSet().size() - unifiableCellLabels.size();
         int numOfOtherDiffCellLabels = otherCellCollection.labelSet().size() - unifiableCellLabels.size();
 
-        Definition definition = termContext.definition();
-
-        /*
-         * CASE 1: cellCollection has no explicitly specified starred-cell;
-         * therefore, no need to worry about AC-unification at all!
-         */
         if (!cellCollection.hasMultiplicityCell()) {
-            for (CellLabel label : unifiableCellLabels) {
-                assert cellCollection.get(label).size() == 1
-                        && otherCellCollection.get(label).size() == 1;
-                addUnificationTask(cellCollection.get(label).iterator().next().content(),
-                        otherCellCollection.get(label).iterator().next().content());
-            }
 
-            Variable frame = cellCollection.hasFrame() ? cellCollection.frame() : null;
-            Variable otherFrame = otherCellCollection.hasFrame()? otherCellCollection.frame() : null;
-
-            if (frame != null && otherFrame != null && (numOfDiffCellLabels > 0) && (numOfOtherDiffCellLabels > 0)) {
-                Variable variable = Variable.getAnonVariable(Sort.BAG);
-                add(frame, CellCollection.of(getRemainingCellMap(otherCellCollection, unifiableCellLabels), variable, definition));
-                add(CellCollection.of(getRemainingCellMap(cellCollection, unifiableCellLabels), variable, definition), otherFrame);
-            } else if (frame == null && (numOfOtherDiffCellLabels > 0)
-                    || otherFrame == null && (numOfDiffCellLabels > 0)) {
-                fail(cellCollection, otherCellCollection);
-                return;
-            } else if (frame == null && otherFrame == null) {
-                if (numOfDiffCellLabels > 0 || numOfOtherDiffCellLabels > 0) {
-                    fail(cellCollection, otherCellCollection);
-                    return;
-                }
-            } else {
-                add(CellCollection.of(getRemainingCellMap(cellCollection, unifiableCellLabels), frame, definition),
-                    CellCollection.of(getRemainingCellMap(otherCellCollection, unifiableCellLabels), otherFrame, definition));
-            }
         }
         /* Case 2: both cell collections have explicitly specified starred-cells */
         else {
@@ -606,15 +690,15 @@ public final class SymbolicUnifier extends AbstractUnifier {
     }
 
     private ListMultimap<CellLabel, CellCollection.Cell> getRemainingCellMap(
-            CellCollection cellCollection, final ImmutableSet<CellLabel> labelsToRemove) {
-        Predicate<CellLabel> notRemoved = new Predicate<CellLabel>() {
-            @Override
-            public boolean apply(CellLabel cellLabel) {
-                return !labelsToRemove.contains(cellLabel);
+            CellCollection cellCollection,
+            Set<CellLabel> labelsToRemove) {
+        ImmutableListMultimap.Builder<CellLabel, CellCollection.Cell> builder = ImmutableListMultimap.builder();
+        cellCollection.cells().asMap().entrySet().stream().forEach(e -> {
+            if (!labelsToRemove.contains(e.getKey())) {
+                builder.putAll(e.getKey(), e.getValue());
             }
-        };
-
-        return Multimaps.filterKeys(cellCollection.cells(), notRemoved);
+        });
+        return builder.build();
     }
 
     @Override
@@ -632,19 +716,34 @@ public final class SymbolicUnifier extends AbstractUnifier {
                 return;
             }
             add(kCollection.frame(), otherKCollection.fragment(length));
+            if (failed) {
+                return;
+            }
         } else if (otherKCollection.concreteSize() < kCollection.concreteSize()) {
             if (!otherKCollection.hasFrame()) {
                 fail(kCollection, otherKCollection);
                 return;
             }
             add(kCollection.fragment(length), otherKCollection.frame());
+            if (failed) {
+                return;
+            }
         } else {
             if (kCollection.hasFrame() && otherKCollection.hasFrame()) {
                 add(kCollection.frame(), otherKCollection.frame());
+                if (failed) {
+                    return;
+                }
             } else if (kCollection.hasFrame()) {
                 add(kCollection.frame(), otherKCollection.fragment(length));
+                if (failed) {
+                    return;
+                }
             } else if (otherKCollection.hasFrame()) {
                 add(kCollection.fragment(length), otherKCollection.frame());
+                if (failed) {
+                    return;
+                }
             }
         }
     }

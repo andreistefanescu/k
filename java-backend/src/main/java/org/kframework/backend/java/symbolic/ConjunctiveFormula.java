@@ -306,13 +306,14 @@ public class ConjunctiveFormula extends Term implements CollectionInternalRepres
                         if (!unifier.symbolicUnify(leftHandSide, rightHandSide)) {
                             return falsify(substitution, equalities, disjunctions, equality);
                         }
+
+                        equalities = equalities.plusAll(i + 1, unifier.constraint().substitution.equalities(context));
                         // TODO(AndreiS): fix this in a general way
                         if (unifier.constraint().equalities.contains(equality)) {
                             pendingEqualities = pendingEqualities.plus(equality);
                             continue;
                         }
                         equalities = equalities.plusAll(i + 1, unifier.constraint().equalities);
-                        equalities = equalities.plusAll(i + 1, unifier.constraint().substitution.equalities(context));
                         disjunctions = disjunctions.plusAll(unifier.constraint().disjunctions);
                     } else if (leftHandSide instanceof Variable
                             && !rightHandSide.variableSet().contains(leftHandSide)) {
