@@ -436,11 +436,4 @@ public class NonACPatternMatcher {
             return null;
         }
     }
-
-
-    @Override
-    boolean stop(Term term, Term otherTerm) {
-        return false;
-    }
-
 }
