@@ -89,10 +89,7 @@ public abstract class AbstractUnifier implements Unifier {
      * doing.
      */
     protected boolean unify() {
-        while (!taskBuffer.isEmpty()) {
-            tasks.push(taskBuffer.pop());
-        }
-
+        flushTaskBuffer();
         while (!failed && !tasks.isEmpty()) {
             Pair<Term, Term> task = tasks.pop();
             Term term = task.getLeft();
@@ -116,6 +113,7 @@ public abstract class AbstractUnifier implements Unifier {
             }
 
             if (stop(term, otherTerm)) {
+                flushTaskBuffer();
                 continue;
             }
 
@@ -165,11 +163,15 @@ public abstract class AbstractUnifier implements Unifier {
                 //}
             }
 
-            while (!taskBuffer.isEmpty()) {
-                tasks.push(taskBuffer.pop());
-            }
+            flushTaskBuffer();
         }
         return !failed;
+    }
+
+    private void flushTaskBuffer() {
+        while (!taskBuffer.isEmpty()) {
+            tasks.push(taskBuffer.pop());
+        }
     }
 
     abstract boolean stop(Term term, Term otherTerm);
