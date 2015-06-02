@@ -94,7 +94,10 @@ public class AbstractKMachine {
             boolean changed = false;
             CellCollection.Builder builder = CellCollection.builder(context.definition());
             for (CellCollection.Cell cell : cellCollection.cells().values()) {
-                if (isWriteCell(cell.cellLabel())) {
+                Term content = substitution.get(Rule.getChoiceVariableForCell(cell.cellLabel()));
+                if (content != null && !cell.content().equals(content)) {
+                    builder.put(cell.cellLabel(), cell.content());
+                } else if (isWriteCell(cell.cellLabel())) {
                     List<RHSInstruction> instructions = getWriteCellInstructions(cell.cellLabel());
                     builder.put(cell.cellLabel(), construct(instructions, substitution, context));
                     changed = true;
@@ -105,7 +108,7 @@ public class AbstractKMachine {
                 } else {
                     builder.put(cell.cellLabel(), cell.content());
                 }
-           }
+            }
             return changed ? (CellCollection) builder.build() : cellCollection;
         }
 
@@ -283,6 +286,9 @@ public class AbstractKMachine {
                     ConjunctiveFormula stashedSubstitution = substitution;
                     match(subCell);
                     if (success) {
+                        substitution = substitution.add(
+                                Rule.getChoiceVariableForCell(instruction.cellLabel()),
+                                subCell.content());
                         substitutions = substitutions.plus(substitution);
                         assert successPC == -1 || successPC == pc;
                         successPC = pc;

@@ -275,7 +275,7 @@ public class SymbolicRewriter {
             term = AbstractKMachine.apply((CellCollection) subject, constraint.substitution(), rule, constraint.termContext());
 
             /* get fresh substitutions of rule variables */
-            BiMap<Variable, Variable> freshSubstitution = Variable.getFreshSubstitution(rule.variableSet());
+            BiMap<Variable, Variable> freshSubstitution = Variable.getFreshSubstitution(Sets.union(rule.boundVariables(), rule.matchingVariables()));
 
             /* rename rule variables in the rule RHS */
             term = term.substituteWithBinders(freshSubstitution, constraint.termContext());
