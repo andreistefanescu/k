@@ -89,6 +89,8 @@ public abstract class AbstractUnifier implements Unifier {
      * doing.
      */
     protected boolean unify() {
+        tasks.clear();
+        failed = false;
         flushTaskBuffer();
         while (!failed && !tasks.isEmpty()) {
             Pair<Term, Term> task = tasks.pop();

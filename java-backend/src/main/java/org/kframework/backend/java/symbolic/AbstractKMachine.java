@@ -284,6 +284,7 @@ public class AbstractKMachine {
                 for (CellCollection.Cell subCell : getSubCellsByLabel(cell, instruction.cellLabel())) {
                     int stashedPC = pc; // pgm counter before AC-matching
                     ConjunctiveFormula stashedSubstitution = substitution;
+                    success = true;
                     match(subCell);
                     if (success) {
                         substitution = substitution.add(
