@@ -12,9 +12,12 @@ class Main {
   }
 
   void Main() {
-    int m = 100, s;
+    print("Testing Collatz' conjecture up to what number? ");
+    int m = read(), s;
     for (int i=1; i<=m; ++i) { 
+      print("Testing Collatz' conjecture for n = ",i," ... ");
       s = collatz(i); 
+      print("Done! It took ",s," steps.\n");
     }
     print("Done.  It appears to hold.\n");
   }
