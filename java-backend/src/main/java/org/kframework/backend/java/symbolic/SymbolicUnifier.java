@@ -488,41 +488,61 @@ public final class SymbolicUnifier extends AbstractUnifier {
          */
         if ((!cellCollection.hasMultiplicityCell() || cellCollection.isConcreteCollection() && cellCollection.concreteSize() == 1)
                 && (!otherCellCollection.hasMultiplicityCell() || otherCellCollection.isConcreteCollection() && otherCellCollection.concreteSize() == 1)) {
-            CellCollection finalCellCollection = cellCollection;
-            CellCollection otherFinalCellCollection = otherCellCollection;
             if (!cellCollection.hasFrame() && !otherCellCollection.hasFrame()) {
-                assert cellCollection.concreteSize() == otherCellCollection.concreteSize();
-                finalCellCollection.cells().asMap().entrySet().stream().forEach(e -> {
-                    addUnificationTask(e.getValue().iterator().next().content(),
-                            otherFinalCellCollection.get(e.getKey()).iterator().next().content());
-                });
+                if (cellCollection.concreteSize() != otherCellCollection.concreteSize()) {
+                    fail(cellCollection, otherCellCollection);
+                    return;
+                }
+                for (Map.Entry<CellLabel, CellCollection.Cell> entry : cellCollection.cells().entries()) {
+                    Collection<CellCollection.Cell> otherCells = otherCellCollection.get(entry.getKey());
+                    if (otherCells.isEmpty()) {
+                        fail(cellCollection, otherCellCollection);
+                        return;
+                    }
+                    addUnificationTask(
+                            entry.getValue().content(),
+                            otherCells.iterator().next().content());
+                }
             } else if (!cellCollection.hasFrame()) {
+                int taskCount = 0;
                 ImmutableListMultimap.Builder<CellLabel, CellCollection.Cell> builder = ImmutableListMultimap.builder();
-                finalCellCollection.cells().asMap().entrySet().stream().forEach(e -> {
-                    Collection<CellCollection.Cell> otherCells = otherFinalCellCollection.get(e.getKey());
+                for (Map.Entry<CellLabel, CellCollection.Cell> entry : cellCollection.cells().entries()) {
+                    Collection<CellCollection.Cell> otherCells = otherCellCollection.get(entry.getKey());
                     if (!otherCells.isEmpty()) {
                         addUnificationTask(
-                                e.getValue().iterator().next().content(),
+                                entry.getValue().content(),
                                 otherCells.iterator().next().content());
+                        ++taskCount;
                     } else {
-                        builder.put(e.getKey(), e.getValue().iterator().next());
+                        builder.put(entry.getKey(), entry.getValue());
                     }
-                });
+                }
+                if (taskCount != otherCellCollection.concreteSize()) {
+                    fail(cellCollection, otherCellCollection);
+                    return;
+                }
                 add(CellCollection.of(builder.build(), null, definition),
-                    otherFinalCellCollection.frame());
+                    otherCellCollection.frame());
             } else if (!otherCellCollection.hasFrame()) {
+                int taskCount = 0;
                 ImmutableListMultimap.Builder<CellLabel, CellCollection.Cell> builder = ImmutableListMultimap.builder();
-                otherFinalCellCollection.cells().asMap().entrySet().stream().forEach(e -> {
-                    Collection<CellCollection.Cell> cells = finalCellCollection.get(e.getKey());
+
+                for (Map.Entry<CellLabel, CellCollection.Cell> entry : otherCellCollection.cells().entries()) {
+                    Collection<CellCollection.Cell> cells = cellCollection.get(entry.getKey());
                     if (!cells.isEmpty()) {
                         addUnificationTask(
                                 cells.iterator().next().content(),
-                                e.getValue().iterator().next().content());
+                                entry.getValue().content());
+                        ++taskCount;
                     } else {
-                        builder.put(e.getKey(), e.getValue().iterator().next());
+                        builder.put(entry.getKey(), entry.getValue());
                     }
-                });
-                add(finalCellCollection.frame(),
+                }
+                if (taskCount != cellCollection.concreteSize()) {
+                    fail(cellCollection, otherCellCollection);
+                    return;
+                }
+                add(cellCollection.frame(),
                     CellCollection.of(builder.build(), null, definition));
             } else {
                 Set<CellLabel> unifiableCellLabels = Sets.intersection(cellCollection.labelSet(), otherCellCollection.labelSet());
@@ -582,7 +602,33 @@ public final class SymbolicUnifier extends AbstractUnifier {
         int numOfOtherDiffCellLabels = otherCellCollection.labelSet().size() - unifiableCellLabels.size();
 
         if (!cellCollection.hasMultiplicityCell()) {
+            for (CellLabel label : unifiableCellLabels) {
+                assert cellCollection.get(label).size() == 1
+                        && otherCellCollection.get(label).size() == 1;
+                addUnificationTask(cellCollection.get(label).iterator().next().content(),
+                        otherCellCollection.get(label).iterator().next().content());
+            }
 
+            Variable frame = cellCollection.hasFrame() ? cellCollection.frame() : null;
+            Variable otherFrame = otherCellCollection.hasFrame()? otherCellCollection.frame() : null;
+
+            if (frame != null && otherFrame != null && (numOfDiffCellLabels > 0) && (numOfOtherDiffCellLabels > 0)) {
+                Variable variable = Variable.getAnonVariable(Sort.BAG);
+                add(frame, CellCollection.of(getRemainingCellMap(otherCellCollection, unifiableCellLabels), variable, definition));
+                add(CellCollection.of(getRemainingCellMap(cellCollection, unifiableCellLabels), variable, definition), otherFrame);
+            } else if (frame == null && (numOfOtherDiffCellLabels > 0)
+                    || otherFrame == null && (numOfDiffCellLabels > 0)) {
+                fail(cellCollection, otherCellCollection);
+                return;
+            } else if (frame == null && otherFrame == null) {
+                if (numOfDiffCellLabels > 0 || numOfOtherDiffCellLabels > 0) {
+                    fail(cellCollection, otherCellCollection);
+                    return;
+                }
+            } else {
+                add(CellCollection.of(getRemainingCellMap(cellCollection, unifiableCellLabels), frame, definition),
+                        CellCollection.of(getRemainingCellMap(otherCellCollection, unifiableCellLabels), otherFrame, definition));
+            }
         }
         /* Case 2: both cell collections have explicitly specified starred-cells */
         else {

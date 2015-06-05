@@ -319,7 +319,10 @@ public class AbstractKMachine {
             } else {
                 assert instruction.type() == MatchingInstruction.Type.GOTO;
                 List<CellCollection.Cell> cells = getSubCellsByLabel(cell, instruction.cellLabel());
-                assert cells.size() == 1 : "cell " + cell.cellLabel() + " does not contain required cell " + instruction.cellLabel();
+                if (cells.size() != 1) {
+                    success = false;
+                    return;
+                }
                 match(cells.get(0));
                 if (!success) {
                     return;
