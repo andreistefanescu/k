@@ -54,12 +54,9 @@ public class FlattenCells extends CopyOnWriteTransformer {
                 .filter(l -> config.get(l).multiplicity == Cell.Multiplicity.ONE)
                 .forEach(l -> fullContents.add(completeCell(l)));
 
-        boolean isFixed = config.get(node).sons.values().stream()
-                .anyMatch(c -> c.multiplicity != Cell.Multiplicity.ONE);
-
         Cell transformerNode = node.shallowCopy();
         transformerNode.setContents(new Bag(fullContents));
-        if (isFixed) {
+        if (isFixedCell(node.getLabel())) {
             transformerNode.setEllipses(Cell.Ellipses.NONE);
         }
         return transformerNode;
@@ -80,11 +77,14 @@ public class FlattenCells extends CopyOnWriteTransformer {
         }
         cell.setContents(contents);
 
-        boolean isFixed = config.get(label).sons.values().stream()
-                .anyMatch(c -> c.multiplicity != Cell.Multiplicity.ONE);
-        cell.setEllipses(isFixed ? Cell.Ellipses.NONE : Cell.Ellipses.RIGHT);
+        cell.setEllipses(isFixedCell(label) ? Cell.Ellipses.NONE : Cell.Ellipses.RIGHT);
 
         return cell;
+    }
+
+    private boolean isFixedCell(String label) {
+        return config.get(label).sons.values().stream()
+                .allMatch(c -> c.multiplicity == Cell.Multiplicity.ONE);
     }
 
 }
