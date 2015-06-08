@@ -36,9 +36,7 @@ public class FlattenCells extends CopyOnWriteTransformer {
     @Override
     public ASTNode visit(Cell node, Void _void)  {
         node = (Cell) super.visit(node, _void);
-        if (node.getEllipses() == Cell.Ellipses.NONE
-                || !config.get(node).hasChildren()
-                || config.get(node).isStarOrPlusWrapper()) {
+        if (node.getEllipses() == Cell.Ellipses.NONE || !config.get(node).hasChildren()) {
             return node;
         }
 
@@ -52,29 +50,40 @@ public class FlattenCells extends CopyOnWriteTransformer {
                 labels);
 
         List<Term> fullContents = Lists.newArrayList(contents);
-        missingCellLabels.stream().forEach(l -> fullContents.add(completeCell(l)));
+        missingCellLabels.stream()
+                .filter(l -> config.get(l).multiplicity == Cell.Multiplicity.ONE)
+                .forEach(l -> fullContents.add(completeCell(l)));
+
+        boolean isFixed = config.get(node).sons.values().stream()
+                .anyMatch(c -> c.multiplicity != Cell.Multiplicity.ONE);
 
         Cell transformerNode = node.shallowCopy();
         transformerNode.setContents(new Bag(fullContents));
-        transformerNode.setEllipses(Cell.Ellipses.NONE);
+        if (isFixed) {
+            transformerNode.setEllipses(Cell.Ellipses.NONE);
+        }
         return transformerNode;
     }
 
     private Cell completeCell(String label) {
         Cell cell = new Cell();
         cell.setLabel(label);
-        cell.setEllipses(Cell.Ellipses.NONE);
 
         Term contents;
-        if (!config.get(label).hasChildren() || config.get(label).isStarOrPlusWrapper()) {
-            contents = Variable.getAnonVar(context.getCellSort(config.get(label).cell));
-        } else {
+        if (config.get(label).hasChildren()) {
             contents = new Bag(config.get(label).sons.keySet().stream()
+                    .filter(l -> config.get(l).multiplicity == Cell.Multiplicity.ONE)
                     .map(this::completeCell)
                     .collect(Collectors.toList()));
+        } else {
+            contents = Variable.getAnonVar(context.getCellSort(config.get(label).cell));
         }
-
         cell.setContents(contents);
+
+        boolean isFixed = config.get(label).sons.values().stream()
+                .anyMatch(c -> c.multiplicity != Cell.Multiplicity.ONE);
+        cell.setEllipses(isFixed ? Cell.Ellipses.NONE : Cell.Ellipses.RIGHT);
+
         return cell;
     }
 

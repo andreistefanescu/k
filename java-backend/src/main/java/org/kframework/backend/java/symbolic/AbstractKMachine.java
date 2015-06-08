@@ -94,8 +94,8 @@ public class AbstractKMachine {
             boolean changed = false;
             CellCollection.Builder builder = CellCollection.builder(context.definition());
             for (CellCollection.Cell cell : cellCollection.cells().values()) {
-                Term content = substitution.get(Rule.getChoiceVariableForCell(cell.cellLabel()));
-                if (content != null && !cell.content().equals(content)) {
+                CellCollection selectedCell = (CellCollection) substitution.get(Rule.getChoiceVariableForCell(cell.cellLabel()));
+                if (selectedCell != null && !cell.equals(selectedCell.cells().values().iterator().next())) {
                     builder.put(cell.cellLabel(), cell.content());
                 } else if (isWriteCell(cell.cellLabel())) {
                     List<RHSInstruction> instructions = getWriteCellInstructions(cell.cellLabel());
@@ -289,7 +289,10 @@ public class AbstractKMachine {
                     if (success) {
                         substitution = substitution.add(
                                 Rule.getChoiceVariableForCell(instruction.cellLabel()),
-                                subCell.content());
+                                CellCollection.singleton(
+                                        subCell.cellLabel(),
+                                        subCell.content(),
+                                        context.definition()));
                         substitutions = substitutions.plus(substitution);
                         assert successPC == -1 || successPC == pc;
                         successPC = pc;
