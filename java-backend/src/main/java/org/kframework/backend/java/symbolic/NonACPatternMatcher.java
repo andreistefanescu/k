@@ -428,12 +428,10 @@ public class NonACPatternMatcher {
      * @return the instantiation of variables
      */
     public static Map<Variable, Term> match(Term subject, Rule rule, TermContext context) {
-        PatternMatcher matcher = new PatternMatcher(rule.isFunction() || rule.isLemma(), context);
+        NonACPatternMatcher matcher = new NonACPatternMatcher(rule.isFunction() || rule.isLemma(), context);
 
-        if (matcher.patternMatch(subject, rule.leftHandSide())) {
-           return RewriteEngineUtils.evaluateConditions(rule, matcher.substitution(), context);
-        } else {
-            return null;
-        }
+        Substitution<Variable, Term> result = matcher.patternMatch(subject, rule.leftHandSide());
+        return result != null ? RewriteEngineUtils.evaluateConditions(rule, result, context) : null;
     }
+
 }

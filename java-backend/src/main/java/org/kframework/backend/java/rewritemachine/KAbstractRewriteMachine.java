@@ -8,7 +8,7 @@ import org.kframework.backend.java.kil.*;
 import org.kframework.backend.java.kil.CellCollection.Cell;
 import org.kframework.backend.java.rewritemachine.RHSInstruction.Constructor;
 import org.kframework.backend.java.symbolic.DeepCloner;
-import org.kframework.backend.java.symbolic.PatternMatcher;
+import org.kframework.backend.java.symbolic.NonACPatternMatcher;
 import org.kframework.backend.java.symbolic.RuleAuditing;
 import org.kframework.backend.java.symbolic.Substitution;
 import org.kframework.backend.java.util.Profiler;
@@ -47,7 +47,7 @@ public class KAbstractRewriteMachine {
     private boolean success = true;
     private boolean isStarNested = false;
 
-    private final PatternMatcher matcher;
+    private final NonACPatternMatcher patternMatcher;
 
     private final TermContext context;
 
@@ -56,7 +56,7 @@ public class KAbstractRewriteMachine {
         this.subject = subject;
         this.instructions = rule.matchingInstructions();
         this.context = context;
-        this.matcher = new PatternMatcher(false, context);
+        this.patternMatcher = new NonACPatternMatcher(context);
     }
 
     public static boolean rewrite(Rule rule, CellCollection.Cell subject, TermContext context) {
@@ -255,11 +255,14 @@ public class KAbstractRewriteMachine {
             Profiler.startTimer(Profiler.PATTERN_MATCH_TIMER);
             /* there should be no AC-matching under the crntCell (violated rule
              * has been filtered out by the compiler) */
-            if (!matcher.patternMatch(crntCell.content(), getReadCellLHS(cellLabel))) {
+            Map<Variable, Term> subst = patternMatcher.patternMatch(
+                    crntCell.content(),
+                    getReadCellLHS(cellLabel));
+
+            if (subst == null) {
                 success = false;
             } else {
-                Substitution<Variable, Term> composedSubst = fExtSubst.substitution()
-                        .plusAll(matcher.substitution());
+                Substitution<Variable, Term> composedSubst = fExtSubst.substitution().plusAll(subst);
                 if (composedSubst == null) {
                     success = false;
                 } else {
