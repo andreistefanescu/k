@@ -140,19 +140,19 @@ public class KItem extends Term implements KItemRepresentation {
             //computed already
             return;
         }
-        if (enableCache) {
-            CacheTableColKey cacheTabColKey = null;
-            CacheTableValue cacheTabVal = null;
-            cacheTabColKey = new CacheTableColKey((KLabelConstant) kLabel, (KList) kList);
-            cacheTabVal = termContext.definition().getSortCacheValue(cacheTabColKey);
-            if (cacheTabVal != null) {
-                sort = cacheTabVal.sort;
-                isExactSort = cacheTabVal.isExactSort;
-                possibleSorts = cacheTabVal.possibleSorts;
-                this.termContext = null;
-                return;
-            }
-        }
+//        if (enableCache) {
+//            CacheTableColKey cacheTabColKey = null;
+//            CacheTableValue cacheTabVal = null;
+//            cacheTabColKey = new CacheTableColKey((KLabelConstant) kLabel, (KList) kList);
+//            cacheTabVal = termContext.definition().getSortCacheValue(cacheTabColKey);
+//            if (cacheTabVal != null) {
+//                sort = cacheTabVal.sort;
+//                isExactSort = cacheTabVal.isExactSort;
+//                possibleSorts = cacheTabVal.possibleSorts;
+//                this.termContext = null;
+//                return;
+//            }
+//        }
         KLabelConstant kLabelConstant = (KLabelConstant) kLabel;
         KList kList = (KList) this.kList;
         Definition definition = termContext.definition();

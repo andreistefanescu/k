@@ -48,7 +48,7 @@ public class Z3Wrapper {
         SMT_PRELUDE = options.smtPrelude == null ? "" : files.loadFromWorkingDirectory(options.smtPrelude);
     }
 
-    public boolean checkQuery(String query, int timeout) {
+    public synchronized boolean checkQuery(String query, int timeout) {
         if (options.z3Executable) {
             return checkQueryWithExternalProcess(query, timeout);
         } else {
@@ -56,7 +56,7 @@ public class Z3Wrapper {
         }
     }
 
-    public boolean checkQueryWithLibrary(String query, int timeout) {
+    private boolean checkQueryWithLibrary(String query, int timeout) {
         boolean result = false;
         try {
             com.microsoft.z3.Context context = new com.microsoft.z3.Context();
@@ -77,7 +77,7 @@ public class Z3Wrapper {
         return result;
     }
 
-    public boolean checkQueryWithExternalProcess(String query, int timeout) {
+    private boolean checkQueryWithExternalProcess(String query, int timeout) {
         String result = "";
         try {
             for (int i = 0; i < Z3_RESTART_LIMIT; i++) {

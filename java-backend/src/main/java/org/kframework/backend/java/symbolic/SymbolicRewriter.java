@@ -24,6 +24,7 @@ import org.kframework.kompile.KompileOptions;
 import org.kframework.krun.api.KRunGraph;
 import org.kframework.krun.api.KRunState;
 import org.kframework.krun.api.SearchType;
+import org.kframework.utils.errorsystem.KExceptionManager;
 import org.kframework.utils.errorsystem.KExceptionManager.KEMException;
 
 import java.math.BigInteger;
@@ -172,54 +173,66 @@ public class SymbolicRewriter {
                         .filter(r -> !r.containsKCell())
                         .count();
 
-                for (Rule rule : rules) {
-                    try {
-                        ruleStopwatch.reset();
-                        ruleStopwatch.start();
+//                for (Rule rule : rules) {
+//                    try {
+//                        ruleStopwatch.reset();
+//                        ruleStopwatch.start();
+//
+//                        if (rule == RuleAuditing.getAuditingRule()) {
+//                            RuleAuditing.beginAudit();
+//                        } else if (RuleAuditing.isAuditBegun() && RuleAuditing.getAuditingRule() == null) {
+//                            System.err.println("\nAuditing " + rule + "...\n");
+//                        }
+//
+//                        List<ConjunctiveFormula> unificationConstraints = subject.unify(
+//                                buildPattern(rule, subject.termContext()));
+//
+//                        for (ConjunctiveFormula unificationConstraint : unificationConstraints) {
+//                            RuleAuditing.succeed(rule);
+//                            /* compute all results */
+//                            rw.start();
+//                            ConstrainedTerm result = buildResult(rule, unificationConstraint);
+//                            rw.stop();
+//                            internalResults.add(Pair.of(result, rule));
+//                            appliedRules.add(rule);
+//                            substitutions.add(unificationConstraint.substitution());
+//                            Coverage.print(definition.kRunOptions().experimental.coverage, subject);
+//                            Coverage.print(definition.kRunOptions().experimental.coverage, rule);
+//                            if (internalResults.size() == successorBound) {
+//                                break;
+//                            }
+//                        }
+//
+//                        if (unificationConstraints.isEmpty()) {
+//                            failedRules.add(rule);
+//                        }
+//                    } catch (KEMException e) {
+//                        e.exception.addTraceFrame("while evaluating rule at " + rule.getSource() + rule.getLocation());
+//                        throw e;
+//                    } finally {
+//                        if (RuleAuditing.isAuditBegun()) {
+//                            if (RuleAuditing.getAuditingRule() == rule) {
+//                                RuleAuditing.endAudit();
+//                            }
+//                            if (!RuleAuditing.isSuccess()
+//                                    && RuleAuditing.getAuditingRule() == rule) {
+//                                throw RuleAuditing.fail();
+//                            }
+//                        }
+//                    }
+//                }
 
-                        if (rule == RuleAuditing.getAuditingRule()) {
-                            RuleAuditing.beginAudit();
-                        } else if (RuleAuditing.isAuditBegun() && RuleAuditing.getAuditingRule() == null) {
-                            System.err.println("\nAuditing " + rule + "...\n");
-                        }
+                List<Pair<List<Pair<ConstrainedTerm, Rule>>, Rule>> collectedResults = rules.parallelStream()
+                        .map(r -> Pair.of(computeRewriteStepByRule(subject, r), r))
+                        .collect(Collectors.toList());
 
-                        List<ConjunctiveFormula> unificationConstraints = subject.unify(
-                                buildPattern(rule, subject.termContext()));
-
-                        for (ConjunctiveFormula unificationConstraint : unificationConstraints) {
-                            RuleAuditing.succeed(rule);
-                            /* compute all results */
-                            rw.start();
-                            ConstrainedTerm result = buildResult(rule, unificationConstraint);
-                            rw.stop();
-                            internalResults.add(Pair.of(result, rule));
-                            appliedRules.add(rule);
-                            substitutions.add(unificationConstraint.substitution());
-                            Coverage.print(definition.kRunOptions().experimental.coverage, subject);
-                            Coverage.print(definition.kRunOptions().experimental.coverage, rule);
-                            if (internalResults.size() == successorBound) {
-                                break;
-                            }
-                        }
-
-                        if (unificationConstraints.isEmpty()) {
-                            failedRules.add(rule);
-                        }
-                    } catch (KEMException e) {
-                        e.exception.addTraceFrame("while evaluating rule at " + rule.getSource() + rule.getLocation());
-                        throw e;
-                    } finally {
-                        if (RuleAuditing.isAuditBegun()) {
-                            if (RuleAuditing.getAuditingRule() == rule) {
-                                RuleAuditing.endAudit();
-                            }
-                            if (!RuleAuditing.isSuccess()
-                                    && RuleAuditing.getAuditingRule() == rule) {
-                                throw RuleAuditing.fail();
-                            }
-                        }
+                for (Pair<List<Pair<ConstrainedTerm, Rule>>, Rule> collectResult : collectedResults) {
+                    internalResults.addAll(collectResult.getLeft());
+                    if (collectResult.getLeft().isEmpty()) {
+                        failedRules.add(collectResult.getRight());
                     }
                 }
+
                 // If we've found matching results from one equivalence class then
                 // we are done, as we can't match rules from two equivalence classes
                 // in the same step.
@@ -244,6 +257,17 @@ public class SymbolicRewriter {
             }
         } finally {
             RuleAuditing.clearAuditingRule();
+        }
+    }
+
+    private static List<Pair<ConstrainedTerm, Rule>> computeRewriteStepByRule(ConstrainedTerm subject, Rule rule) {
+        try {
+            return subject.unify(buildPattern(rule, subject.termContext())).stream()
+                    .map(c -> Pair.of(buildResult(rule, c), rule))
+                    .collect(Collectors.toList());
+        } catch (KEMException e) {
+            e.exception.addTraceFrame("while evaluating rule at " + rule.getSource() + rule.getLocation());
+            throw e;
         }
     }
 
