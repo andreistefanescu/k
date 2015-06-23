@@ -303,6 +303,7 @@ public class SymbolicRewriter {
             constraint = constraint.orientSubstitution(rule.matchingVariables());
 
             /* apply the constraints substitution on the rule RHS */
+            constraint.termContext().setTopConstraint(constraint);
             term = AbstractKMachine.apply((CellCollection) subject, constraint.substitution(), rule, constraint.termContext());
 
             /* eliminate bindings of rule variables */

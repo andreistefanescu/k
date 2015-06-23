@@ -510,7 +510,7 @@ public class KItem extends Term implements KItemRepresentation {
                         return result;
                     } else if (owiseResult != null) {
                         if (!kItem.isGround()) {
-                            if (context.global().krunOptions == null) {
+                            if (context.global().stage != Stage.REWRITING) {
                                 return kItem;
                             }
                             /**
