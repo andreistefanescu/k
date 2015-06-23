@@ -76,7 +76,7 @@ public class PatternExpander extends CopyOnWriteTransformer {
             } else {
                 Set<Variable> existVariables = ruleInputKList.variableSet();
                 unificationConstraint = unificationConstraint.orientSubstitution(existVariables);
-                if (unificationConstraint == null || !unificationConstraint.isMatching(existVariables)) {
+                if (!unificationConstraint.isMatching(existVariables)) {
                     continue;
                 }
 
@@ -95,7 +95,7 @@ public class PatternExpander extends CopyOnWriteTransformer {
                     .addAll(rule.ensures())
                     .simplify();
             if (!unificationConstraint.isFalse() && !unificationConstraint.checkUnsat()) {
-                results.add(SymbolicRewriter.buildResult(rule, unificationConstraint));
+                results.add(SymbolicRewriter.buildResult(rule, unificationConstraint, null, false));
             }
         }
 

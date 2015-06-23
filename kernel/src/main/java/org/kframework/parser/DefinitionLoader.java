@@ -1,11 +1,7 @@
 // Copyright (c) 2014-2015 K Team. All Rights Reserved.
 package org.kframework.parser;
 
-import java.io.File;
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
-
+import com.google.inject.Inject;
 import org.apache.commons.io.FilenameUtils;
 import org.kframework.backend.Backend;
 import org.kframework.compile.checks.CheckListDecl;
@@ -21,11 +17,11 @@ import org.kframework.kil.loader.Context;
 import org.kframework.kil.loader.RemoveUnusedModules;
 import org.kframework.parser.concrete.DefinitionLocalKParser;
 import org.kframework.parser.concrete.disambiguate.NormalizeASTTransformer;
-import org.kframework.parser.generator.OuterParser;
 import org.kframework.parser.generator.CacheLookupFilter;
 import org.kframework.parser.generator.Definition2SDF;
 import org.kframework.parser.generator.DefinitionSDF;
 import org.kframework.parser.generator.DisambiguateRulesFilter;
+import org.kframework.parser.generator.OuterParser;
 import org.kframework.parser.generator.ParseConfigsFilter;
 import org.kframework.parser.generator.ParseRulesFilter;
 import org.kframework.parser.generator.ProgramSDF;
@@ -34,13 +30,17 @@ import org.kframework.parser.utils.ResourceExtractor;
 import org.kframework.parser.utils.Sdf2Table;
 import org.kframework.utils.BinaryLoader;
 import org.kframework.utils.Stopwatch;
+import org.kframework.utils.errorsystem.KEMException;
 import org.kframework.utils.errorsystem.KException;
 import org.kframework.utils.errorsystem.KException.ExceptionType;
 import org.kframework.utils.errorsystem.KException.KExceptionGroup;
 import org.kframework.utils.errorsystem.KExceptionManager;
 import org.kframework.utils.file.FileUtil;
 
-import com.google.inject.Inject;
+import java.io.File;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 public class DefinitionLoader {
 
@@ -101,7 +101,7 @@ public class DefinitionLoader {
         // for now just use this file as main argument
         // ------------------------------------- outer parsing
 
-        outer.slurp(mainFile.getPath(), context);
+        outer.slurp(mainFile, context);
 
         // transfer information from the OuterParser object, to the Definition object
         org.kframework.kil.Definition def = new org.kframework.kil.Definition();
@@ -125,7 +125,7 @@ public class DefinitionLoader {
 
         if (!def.getDefinitionContext().containsModule(mainModule)) {
             String msg = "Could not find main module '" + mainModule + "'. Use --main-module option to specify another.";
-            throw KExceptionManager.compilerError(msg);
+            throw KEMException.compilerError(msg);
         }
         sw.printIntermediate("Outer Parsing");
 
@@ -191,7 +191,7 @@ public class DefinitionLoader {
             try {
                 // delete the file with the cached/partially parsed rules
                 if (cache.exists() && !cache.delete()) {
-                    throw KExceptionManager.criticalError("Could not delete file " + cache);
+                    throw KEMException.criticalError("Could not delete file " + cache);
                 }
                 // Sdf2Table.run_sdf2table(new File(context.dotk.getAbsoluteFile() + "/def"), "Concrete");
                 Thread t1 = sdf2Table.run_sdf2table_parallel(files.resolveTemp("def"), "Concrete");
@@ -203,7 +203,7 @@ public class DefinitionLoader {
                 files.copyTempFileToKompiledFile("ground/Concrete.tbl", "Ground.tbl");
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                throw KExceptionManager.criticalError(
+                throw KEMException.criticalError(
                         "Thread was interrupted trying to run SDF2Table");
             }
 

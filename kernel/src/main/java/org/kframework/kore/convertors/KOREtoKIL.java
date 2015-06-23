@@ -61,13 +61,12 @@ public class KOREtoKIL implements Function<Definition, org.kframework.kil.Defini
                 Sentence sentence = iter.next();
                 if (sentence instanceof org.kframework.definition.Production) {
                     org.kframework.definition.Production prod = (org.kframework.definition.Production) sentence;
-                    List<K> attrs = stream(prod.att().att()).collect(Collectors.toList());
-                    Optional<String> listType = prod.att().getOptional(USER_LIST_ATTRIBUTE);
-                    if (listType.isPresent()) {
-                        List<org.kframework.definition.Production> prods = listProds.get(listType.get());
+                    if (prod.att().contains(USER_LIST_ATTRIBUTE)) {
+                        String listSort = prod.sort().name();
+                        List<org.kframework.definition.Production> prods = listProds.get(listSort);
                         if (prods == null) {
                             prods = new ArrayList<>(3);
-                            listProds.put(listType.get(), prods);
+                            listProds.put(listSort, prods);
                         }
                         prods.add(prod);
                         iter.remove();
@@ -83,13 +82,14 @@ public class KOREtoKIL implements Function<Definition, org.kframework.kil.Defini
             for (Map.Entry<String, List<org.kframework.definition.Production>> entry : listProds.entrySet()) {
                 String listType = entry.getKey();
                 List<org.kframework.definition.Production> prods = entry.getValue();
-                if (prods.size() != 3 && prods.size() != 2) {
+                if (prods.size() != 3) {
                     throw new AssertionError("Found list with " + prods.size() + " elements.");
-                }
-                if (prods.size() == 2) {
-                    userLists.add(makeNonEmptyUserList(prods, listType));
                 } else {
-                    userLists.add(makeUserList(prods, listType));
+                    if (prods.iterator().next().att().get(USER_LIST_ATTRIBUTE).get().equals("+")) {
+                        userLists.add(makeNonEmptyUserList(prods, listType));
+                    } else {
+                        userLists.add(makeUserList(prods, listType));
+                    }
                 }
             }
         }
@@ -190,9 +190,9 @@ public class KOREtoKIL implements Function<Definition, org.kframework.kil.Defini
     public org.kframework.kil.Definition convertDefinition(Definition definition) {
         List<org.kframework.kil.DefinitionItem> items = new ArrayList<>();
 
-        for (Require r : iterable(definition.requires())) {
-            items.add(convertRequire(r));
-        }
+//        for (Require r : iterable(definition.requires())) {
+//            items.add(convertRequire(r));
+//        }
 
         for (Module m : iterable(definition.modules())) {
             items.add(convertModule(m));
@@ -203,15 +203,15 @@ public class KOREtoKIL implements Function<Definition, org.kframework.kil.Defini
         return def;
     }
 
-    public org.kframework.kil.Require convertRequire(Require require) {
-        return new org.kframework.kil.Require(require.file().getPath());
-    }
+//    public org.kframework.kil.Require convertRequire(Require require) {
+//        return new org.kframework.kil.Require(require.file().getPath());
+//    }
 
     public org.kframework.kil.Module convertModule(Module module) {
         org.kframework.kil.Module mod = new org.kframework.kil.Module(module.name());
 
         List<Sentence> sentences = scala.collection.JavaConversions.seqAsJavaList(module
-                .localSentences().toList());
+                .sentences().toList());
         mod = mod.addModuleItems(convertSentences(sentences));
 
         mod.setAttributes(convertAttributes(module.att()));
@@ -254,9 +254,7 @@ public class KOREtoKIL implements Function<Definition, org.kframework.kil.Defini
                 .filter(s -> !(s instanceof org.kframework.definition.Production)).collect(Collectors.toSet());
 
         for (Sentence sentence : allTheRest) {
-            if (sentence instanceof Import) {
-                ret.add(convertModuleItem((Import) sentence));
-            } else if (sentence instanceof Bubble) {
+            if (sentence instanceof Bubble) {
                 ret.add(convertModuleItem((Bubble) sentence));
             } else if (sentence instanceof ModuleComment) {
                 ret.add(convertModuleItem((ModuleComment) sentence));
@@ -281,12 +279,6 @@ public class KOREtoKIL implements Function<Definition, org.kframework.kil.Defini
         }
 
         return ret;
-    }
-
-    public org.kframework.kil.ModuleItem convertModuleItem(Import anImport) {
-        org.kframework.kil.Import kilImport = new org.kframework.kil.Import(anImport.moduleName());
-        kilImport.setAttributes(convertAttributes(anImport.att()));
-        return kilImport;
     }
 
     public org.kframework.kil.ModuleItem convertModuleItem(Bubble bubble) {
@@ -420,12 +412,14 @@ public class KOREtoKIL implements Function<Definition, org.kframework.kil.Defini
             if (a instanceof KApply) {
                 KApply attr = (KApply) a;
                 KLabel key = attr.klabel();
-                if (!key.equals(KLabel("org.kframework.attributes.Location"))) { // ignoring location
+                if (!key.equals(KLabel("Location")) && !key.equals(KLabel("Source")) && !key.equals(KLabel("org.kframework.attributes.Location")) && !key.equals(KLabel("org.kframework.attributes.Source"))) { // ignoring location
                     // information
                     KList klist = attr.klist();
                     if (klist.size() == 1 && klist.items().get(0) instanceof KToken) {
                         String value = ((KToken) klist.items().get(0)).s();
                         kilAttributes.add(Attribute.of(key.name(), value));
+                    } else if (klist.size() == 0) {
+                        kilAttributes.add(Attribute.of(key.name(), ""));
                     } else {
                         throw NOT_IMPLEMENTED();
                     }

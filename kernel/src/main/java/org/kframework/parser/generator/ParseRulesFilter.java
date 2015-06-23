@@ -8,17 +8,18 @@ import java.util.Formatter;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.kframework.attributes.Location;
+import org.kframework.attributes.Source;
 import org.kframework.kil.ASTNode;
-import org.kframework.kil.Location;
 import org.kframework.kil.Module;
 import org.kframework.kil.Rule;
 import org.kframework.kil.Sentence;
-import org.kframework.kil.Source;
 import org.kframework.kil.StringSentence;
 import org.kframework.kil.loader.Constants;
 import org.kframework.kil.loader.Context;
 import org.kframework.kil.loader.JavaClassesFactory;
 import org.kframework.kil.visitors.ParseForestTransformer;
+import org.kframework.utils.errorsystem.KEMException;
 import org.kframework.utils.errorsystem.ParseFailedException;
 import org.kframework.parser.utils.CachedSentence;
 import org.kframework.utils.XmlLoader;
@@ -118,7 +119,7 @@ public class ParseRulesFilter extends ParseForestTransformer {
             if (context.globalOptions.debug) {
                 File file = files.resolveTemp("timing.log");
                 if (!file.getParentFile().exists() && !file.getParentFile().mkdirs()) {
-                    throw KExceptionManager.criticalError("Could not create directory " + file.getParentFile());
+                    throw KEMException.criticalError("Could not create directory " + file.getParentFile());
                 }
                 try (Formatter f = new Formatter(new FileWriter(file, true))) {
                     f.format("Parsing rule: Time: %6d Location: %s:%s%n", (System.currentTimeMillis() - startTime), ss.getSource(), ss.getLocation());
