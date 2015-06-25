@@ -633,6 +633,7 @@ public class SymbolicRewriter {
 
         System.err.println("build time " + rw.elapsed(TimeUnit.MILLISECONDS));
         System.err.println("rules (k/type/total) " + kRules + "/" + typeRules + "/" + totalRules);
+        System.err.println("#failed proofs = " + proofResults.size());
         return proofResults;
     }
 
