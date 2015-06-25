@@ -28,7 +28,7 @@ object KORE extends Constructors[K] with ScalaSugar[K] {
 
   def KApply(klabel: KLabel, klist: KList): KApply = KApply(klabel, klist, Attributes())
 
-  def KToken(sort: Sort, string: String): KToken = KToken(sort, string, Attributes())
+  def KToken(string: String, sort: Sort): KToken = KToken(string, sort, Attributes())
 
   def KSequence(ks: java.util.List[K]): KSequence = KSequence(ks, Att())
 
@@ -51,7 +51,7 @@ object KORE extends Constructors[K] with ScalaSugar[K] {
 
   override def Sort(name: String): Sort = ADT.Sort(name)
 
-  override def KToken(sort: Sort, s: String, att: Att): KToken = ADT.KToken(sort, s, att)
+  override def KToken(s: String, sort: Sort, att: Att): KToken = ADT.KToken(s, sort, att)
 
   override def KRewrite(left: K, right: K, att: Att): KRewrite = ADT.KRewrite(left, right, att)
 
@@ -72,4 +72,6 @@ object KORE extends Constructors[K] with ScalaSugar[K] {
   @annotation.varargs def Att(ks: K*) = org.kframework.attributes.Att(ks: _*)
 
   def self = this
+
+  @annotation.varargs override def KApply(klabel: KLabel, items: K*): KApply = KApply(klabel, KList(items.asJava), Att())
 }

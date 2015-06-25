@@ -6,19 +6,26 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import org.kframework.POSet;
 import org.kframework.attributes.Location;
+import org.kframework.attributes.Source;
+import org.kframework.builtin.Sorts;
 import org.kframework.compile.utils.MetaK;
-import org.kframework.kore.Sort;
 import org.kframework.definition.NonTerminal;
+import org.kframework.definition.Production;
+import org.kframework.kore.KLabel;
+import org.kframework.kore.Sort;
+import org.kframework.parser.Ambiguity;
 import org.kframework.parser.Constant;
+import org.kframework.parser.SafeTransformer;
 import org.kframework.parser.SetsGeneralTransformer;
 import org.kframework.parser.SetsTransformerWithErrors;
 import org.kframework.parser.Term;
-import org.kframework.parser.*;
+import org.kframework.parser.TermCons;
 import org.kframework.utils.errorsystem.KException;
 import org.kframework.utils.errorsystem.KException.ExceptionType;
 import org.kframework.utils.errorsystem.KException.KExceptionGroup;
 import org.kframework.utils.errorsystem.ParseFailedException;
 import org.kframework.utils.errorsystem.VariableTypeClashException;
+import org.pcollections.ConsPStack;
 import scala.Tuple2;
 import scala.util.Either;
 import scala.util.Left;
@@ -30,8 +37,8 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-import static org.kframework.kore.KORE.*;
 import static org.kframework.Collections.*;
+import static org.kframework.kore.KORE.*;
 
 /**
  * Apply the priority and associativity filters.
@@ -40,14 +47,23 @@ public class VariableTypeInferenceFilter extends SetsGeneralTransformer<ParseFai
     public enum VarType { CONTEXT, USER }
     private final POSet<Sort> subsorts;
     private final scala.collection.immutable.Set<Sort> sortSet;
+    private final scala.collection.immutable.Map<KLabel, scala.collection.immutable.Set<Production>> productions;
+    private final boolean inferSortChecks;
     private Set<ParseFailedException> warnings = this.warningUnit();
-    public VariableTypeInferenceFilter(POSet<Sort> subsorts, scala.collection.immutable.Set<Sort> sortSet) {
+    public VariableTypeInferenceFilter(POSet<Sort> subsorts, scala.collection.immutable.Set<Sort> sortSet, scala.collection.immutable.Map<
+            KLabel, scala.collection.immutable.Set<Production>> productions, boolean inferSortChecks) {
         this.subsorts = subsorts;
         this.sortSet = sortSet;
+        this.productions = productions;
+        this.inferSortChecks = inferSortChecks;
     }
 
     @Override
     public Tuple2<Either<java.util.Set<ParseFailedException>, Term>, java.util.Set<ParseFailedException>> apply(Term t) {
+        Term loc = t;
+        if (loc instanceof Ambiguity) {
+            loc = ((Ambiguity)loc).items().iterator().next();
+        }
 
         Set<VarInfo> vis = new CollectVariables().apply(t)._2();
         //System.out.println("vis = " + vis);
@@ -60,7 +76,7 @@ public class VariableTypeInferenceFilter extends SetsGeneralTransformer<ParseFai
                 } else if (!s.equals(vi.sort)) {
                     String msg = vi.varName + " declared with two different sorts: " + s + " and " + vi.sort;
                     //System.out.println(msg);
-                    KException kex = new KException(KException.ExceptionType.ERROR, KException.KExceptionGroup.CRITICAL, msg, null, t.location().get());
+                    KException kex = new KException(KException.ExceptionType.ERROR, KException.KExceptionGroup.CRITICAL, msg, loc.source().get(), loc.location().get());
                     return new Tuple2<>(Left.apply(Sets.newHashSet(new VariableTypeClashException(kex))), this.warningUnit());
                 }
             }
@@ -90,11 +106,11 @@ public class VariableTypeInferenceFilter extends SetsGeneralTransformer<ParseFai
                     Collection<Sort> values = variant.get(key);
                     Set<Sort> mins = new HashSet<>();
                     for (Sort sort : iterable(sortSet)) { // for every declared sort
-                        if (subsorts.lessThenEq(sort, Sort("KBott")))
+                        if (subsorts.lessThanEq(sort, Sort("KBott")))
                             continue;
                         boolean min = true;
                         for (Sort var : values) {
-                            if (!subsorts.greaterThenEq(var, sort)) {
+                            if (!subsorts.greaterThanEq(var, sort)) {
                                 min = false;
                                 break;
                             }
@@ -112,7 +128,7 @@ public class VariableTypeInferenceFilter extends SetsGeneralTransformer<ParseFai
                         for (Sort vv1 : mins) {
                             boolean maxSort = true;
                             for (Sort vv2 : mins)
-                                if (subsorts.lessThen(vv1, vv2))
+                                if (subsorts.lessThan(vv1, vv2))
                                     maxSort = false;
                             if (maxSort)
                                 maxSorts.add(vv1);
@@ -138,7 +154,7 @@ public class VariableTypeInferenceFilter extends SetsGeneralTransformer<ParseFai
                 if (solutions.size() == 0) {
                     if (fails != null) {
                         String msg = "Could not infer a sort for variable '" + fails + "' to match every location.";
-                        KException kex = new KException(ExceptionType.ERROR, KExceptionGroup.CRITICAL, msg, null, t.location().get());
+                        KException kex = new KException(ExceptionType.ERROR, KExceptionGroup.CRITICAL, msg, loc.source().get(), loc.location().get());
                         return new Tuple2<>(Left.apply(Sets.newHashSet(new VariableTypeClashException(kex))), this.warningUnit());
 
                     } else {
@@ -148,7 +164,7 @@ public class VariableTypeInferenceFilter extends SetsGeneralTransformer<ParseFai
                         for (Sort vv1 : failsAmb)
                             msg += vv1 + ", ";
                         msg = msg.substring(0, msg.length() - 2);
-                        KException kex = new KException(ExceptionType.ERROR, KExceptionGroup.CRITICAL, msg, null, t.location().get());
+                        KException kex = new KException(ExceptionType.ERROR, KExceptionGroup.CRITICAL, msg, loc.source().get(), loc.location().get());
                         return new Tuple2<>(Left.apply(Sets.newHashSet(new VariableTypeClashException(kex))), this.warningUnit());
 
                     }
@@ -160,7 +176,8 @@ public class VariableTypeInferenceFilter extends SetsGeneralTransformer<ParseFai
                         Sort sort = sol1.get(key).iterator().next();
                         decl.put(key, sort);
                         String msg = "Variable '" + key + "' was not declared. Assuming sort " + sort + ".";
-                        warnings = mergeWarnings(warnings, makeWarningSet(new VariableTypeClashException(new KException(ExceptionType.HIDDENWARNING, KExceptionGroup.COMPILER, msg, null, t.location().get()))));
+                        warnings = mergeWarnings(warnings, makeWarningSet(new VariableTypeClashException(
+                                new KException(ExceptionType.HIDDENWARNING, KExceptionGroup.COMPILER, msg, loc.source().get(), loc.location().get()))));
                     }
                     // after type inference for concrete sorts, reject erroneous branches
                     if (!decl.isEmpty()) {
@@ -179,7 +196,7 @@ public class VariableTypeInferenceFilter extends SetsGeneralTransformer<ParseFai
                             for (Sort vv1 : values)
                                 msg += vv1 + ", ";
                             msg = msg.substring(0, msg.length() - 2);
-                            KException kex = new KException(ExceptionType.ERROR, KExceptionGroup.CRITICAL, msg, null, t.location().get());
+                            KException kex = new KException(ExceptionType.ERROR, KExceptionGroup.CRITICAL, msg, loc.source().get(), loc.location().get());
                             return new Tuple2<>(Left.apply(Sets.newHashSet(new VariableTypeClashException(kex))), this.warningUnit());
                         }
                     }
@@ -192,7 +209,7 @@ public class VariableTypeInferenceFilter extends SetsGeneralTransformer<ParseFai
                     // This makes it that I can't disambiguate properly
                     // I can't think of a quick fix... actually any fix. I will delay it for the new parser.
                     String msg = "Parser: failed to infer sorts for variables.\n    Please file a bug report at https://github.com/kframework/k/issues.";
-                    KException kex = new KException(ExceptionType.ERROR, KExceptionGroup.CRITICAL, msg, null, t.location().get());
+                    KException kex = new KException(ExceptionType.ERROR, KExceptionGroup.CRITICAL, msg, loc.source().get(), loc.location().get());
                     return new Tuple2<>(Left.apply(Sets.newHashSet(new VariableTypeClashException(kex))), this.warningUnit());
                 }
             }
@@ -213,7 +230,7 @@ public class VariableTypeInferenceFilter extends SetsGeneralTransformer<ParseFai
         public Location loc;
         public VarType varType;
 
-        public VarInfo(String varName, Sort sort, Location loc, VarType varType) {
+        public VarInfo(String varName, Sort sort, Source source, Location loc, VarType varType) {
             this.varName = varName;
             this.sort = sort;
             this.loc = loc;
@@ -255,20 +272,35 @@ public class VariableTypeInferenceFilter extends SetsGeneralTransformer<ParseFai
         }
     }
 
+    public static Sort getSortOfCast(TermCons tc) {
+        switch (tc.production().klabel().get().name()) {
+        case "#SyntacticCast":
+        case "#OuterCast":
+            return tc.production().sort();
+        case "#InnerCast":
+            return ((NonTerminal)tc.production().items().apply(0)).sort();
+        default:
+            if (tc.production().klabel().get().name().startsWith("#SemanticCastTo")) {
+                return tc.production().sort();
+            }
+            throw new AssertionError("Unexpected cast type");
+        }
+    }
+
     private class CollectVariables extends SetsGeneralTransformer<ParseFailedException, VarInfo> {
         public Tuple2<Either<java.util.Set<ParseFailedException>, Term>, java.util.Set<VarInfo>> apply(TermCons tc) {
             // TODO: (Radu) if this is cast, take the sort from annotations?
             Set<VarInfo> collector = this.makeWarningSet();
             if (tc.production().klabel().isDefined()
                     && (tc.production().klabel().get().name().equals("#SyntacticCast")
-                    || tc.production().klabel().get().name().equals("#SemanticCast")
+                    || tc.production().klabel().get().name().startsWith("#SemanticCastTo")
                     || tc.production().klabel().get().name().equals("#InnerCast"))) {
-                Term t = tc.items().get(0);
-                collector = new CollectVariables2(Sort(tc.production().att().<String>get("sort").get()), VarType.USER).apply(t)._2();
+                Term t = tc.get(0);
+                collector = new CollectVariables2(getSortOfCast(tc), VarType.USER).apply(t)._2();
             } else {
                 for (int i = 0, j = 0; i < tc.production().items().size(); i++) {
                     if (tc.production().items().apply(i) instanceof NonTerminal) {
-                        Term t = tc.items().get(j);
+                        Term t = tc.get(j);
                         Set<VarInfo> vars = new CollectVariables2(((NonTerminal) tc.production().items().apply(i)).sort(), VarType.CONTEXT).apply(t)._2();
                         collector = mergeWarnings(collector, vars);
                         j++;
@@ -297,8 +329,8 @@ public class VariableTypeInferenceFilter extends SetsGeneralTransformer<ParseFai
             }
 
             public Tuple2<Either<java.util.Set<ParseFailedException>, Term>, java.util.Set<VarInfo>> apply(Constant c) {
-                if (c.production().sort().name().equals("KVariable")) {
-                    return new Tuple2<>(Right.apply(c), this.makeWarningSet(new VarInfo(c.value(), this.sort, c.location().get(), varType)));
+                if (c.production().sort().equals(Sorts.KVariable()) && !c.value().equals(MetaK.Constants.anyVarSymbol)) {
+                    return new Tuple2<>(Right.apply(c), this.makeWarningSet(new VarInfo(c.value(), this.sort, c.source().get(), c.location().get(), varType)));
                 }
                 return new Tuple2<>(Right.apply(c), this.warningUnit());
             }
@@ -312,25 +344,25 @@ public class VariableTypeInferenceFilter extends SetsGeneralTransformer<ParseFai
         }
 
         public Either<java.util.Set<ParseFailedException>, Term> apply(TermCons tc) {
-            // TODO: (Radu) if this is cast, take the sort from annotations?
             if (tc.production().klabel().isDefined()
                     && (tc.production().klabel().get().name().equals("#SyntacticCast")
-                    || tc.production().klabel().get().name().equals("#SemanticCast")
+                    || tc.production().klabel().get().name().startsWith("#SemanticCastTo")
                     || tc.production().klabel().get().name().equals("#InnerCast"))) {
-                Term t = tc.items().get(0);
-                Either<Set<ParseFailedException>, Term> rez = new ApplyTypeCheck2(Sort(tc.production().att().<String>get("sort").get())).apply(t);
+                Term t = tc.get(0);
+                boolean strictSortEquality = !tc.production().klabel().get().name().startsWith("#SemanticCastTo");
+                Either<Set<ParseFailedException>, Term> rez = new ApplyTypeCheck2(getSortOfCast(tc), strictSortEquality, strictSortEquality && inferSortChecks).apply(t);
                 if (rez.isLeft())
                     return rez;
-                tc.items().set(0, rez.right().get());
+                tc = tc.with(0, rez.right().get());
             } else {
                 for (int i = 0, j = 0; i < tc.production().items().size(); i++) {
                     if (tc.production().items().apply(i) instanceof NonTerminal) {
-                        Term t = tc.items().get(j);
+                        Term t = tc.get(j);
                         Sort s = ((NonTerminal) tc.production().items().apply(i)).sort();
-                        Either<Set<ParseFailedException>, Term> rez = new ApplyTypeCheck2(s).apply(t);
+                        Either<Set<ParseFailedException>, Term> rez = new ApplyTypeCheck2(s, false, inferSortChecks).apply(t);
                         if (rez.isLeft())
                             return rez;
-                        tc.items().set(j, rez.right().get());
+                        tc = tc.with(j, rez.right().get());
                         j++;
                     }
                 }
@@ -343,11 +375,15 @@ public class VariableTypeInferenceFilter extends SetsGeneralTransformer<ParseFai
 
         private class ApplyTypeCheck2 extends SetsTransformerWithErrors<ParseFailedException> {
             private final Sort sort;
-            public ApplyTypeCheck2(Sort sort) {
+            private final boolean strictSortEquality;
+            private final boolean addCast;
+
+            public ApplyTypeCheck2(Sort sort, boolean strictSortEquality, boolean addCast) {
                 this.sort = sort;
+                this.strictSortEquality = strictSortEquality;
+                this.addCast = addCast;
             }
 
-            // TODO (Radu): check types of terms under rewrites too?
             public Either<java.util.Set<ParseFailedException>, Term> apply(TermCons tc) {
                 if (tc.production().att().contains("bracket")
                         || (tc.production().klabel().isDefined()
@@ -358,17 +394,22 @@ public class VariableTypeInferenceFilter extends SetsGeneralTransformer<ParseFai
             }
 
             public Either<java.util.Set<ParseFailedException>, Term> apply(Constant c) {
-                if (c.production().sort().name().equals("KVariable")) {
+                if (c.production().sort().equals(Sorts.KVariable())) {
                     Sort declared = decl.get(c.value());
-                    if (declared != null && !declared.equals(Sort("K"))) {
-                        //System.out.println("c = " + c.value() + ", " + declared + " < " + sort);
-                        if (!subsorts.lessThenEq(declared, sort)) {
-                            // TODO: location information
+                    if (declared != null && !declared.equals(Sorts.K())) {
+                        if ((!strictSortEquality && !subsorts.lessThanEq(declared, sort)) || (strictSortEquality && !declared.equals(sort))) {
                             String msg = "Unexpected sort " + declared + " for term " + c.value() + ". Expected " + sort + ".";
-                            //System.out.println(msg);
-                            KException kex = new KException(KException.ExceptionType.ERROR, KException.KExceptionGroup.CRITICAL, msg, null, c.location().get());
+                            KException kex = new KException(KException.ExceptionType.ERROR, KException.KExceptionGroup.CRITICAL, msg, c.source().get(), c.location().get());
                             return Left.apply(Sets.newHashSet(new VariableTypeClashException(kex)));
                         }
+                        if (addCast) {
+                            Production cast = productions.apply(KLabel("#SemanticCastTo" + declared.name())).head();
+                            return Right.apply(TermCons.apply(ConsPStack.singleton(c), cast, c.location(), c.source()));
+                        }
+                    } else if (c.value().equals(MetaK.Constants.anyVarSymbol) && !sort.equals(Sorts.K()) && !sort.equals(Sorts.KList()) && addCast) {
+                        //infer anonymous variables only based on their immediate context
+                        Production cast = productions.apply(KLabel("#SemanticCastTo" + sort.name())).head();
+                        return Right.apply(TermCons.apply(ConsPStack.singleton(c), cast, c.location(), c.source()));
                     }
                 }
                 return Right.apply(c);
@@ -412,17 +453,16 @@ public class VariableTypeInferenceFilter extends SetsGeneralTransformer<ParseFai
         }
 
         public Term apply(TermCons tc) {
-            // TODO: (Radu) if this is cast, take the sort from annotations?
             if (tc.production().klabel().isDefined()
                     && (tc.production().klabel().get().name().equals("#SyntacticCast")
-                    || tc.production().klabel().get().name().equals("#SemanticCast")
+                    || tc.production().klabel().get().name().startsWith("#SemanticCastTo")
                     || tc.production().klabel().get().name().equals("#InnerCast"))) {
-                Term t = tc.items().get(0);
-                new CollectUndeclaredVariables2(Sort(tc.production().att().<String>get("sort").get())).apply(t);
+                Term t = tc.get(0);
+                new CollectUndeclaredVariables2(getSortOfCast(tc)).apply(t);
             } else {
                 for (int i = 0, j = 0; i < tc.production().items().size(); i++) {
                     if (tc.production().items().apply(i) instanceof NonTerminal) {
-                        Term t = tc.items().get(j);
+                        Term t = tc.get(j);
                         new CollectUndeclaredVariables2(((NonTerminal) tc.production().items().apply(i)).sort()).apply(t);
                         j++;
                     }
@@ -447,7 +487,7 @@ public class VariableTypeInferenceFilter extends SetsGeneralTransformer<ParseFai
             }
 
             public Term apply(Constant c) {
-                if (c.production().sort().name().equals("KVariable") && !declaredNames.contains(c.value()) && !c.value().equals(MetaK.Constants.anyVarSymbol)) {
+                if (c.production().sort().equals(Sorts.KVariable()) && !declaredNames.contains(c.value()) && !c.value().equals(MetaK.Constants.anyVarSymbol)) {
                     if (vars.isEmpty())
                         vars.add(HashMultimap.<String, Sort>create());
                     for (Multimap<String, Sort> vars2 : vars)

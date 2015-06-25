@@ -1,6 +1,11 @@
 // Copyright (c) 2013-2015 K Team. All Rights Reserved.
 package org.kframework.backend.java.kil;
 
+import com.google.common.collect.Sets;
+import com.google.inject.Inject;
+import com.google.inject.Provider;
+import org.kframework.attributes.Location;
+import org.kframework.attributes.Source;
 import org.kframework.backend.java.builtins.BoolToken;
 import org.kframework.backend.java.builtins.MetaK;
 import org.kframework.backend.java.builtins.SortMembership;
@@ -10,12 +15,12 @@ import org.kframework.backend.java.util.ImpureFunctionException;
 import org.kframework.backend.java.util.Profiler;
 import org.kframework.backend.java.util.Subsorts;
 import org.kframework.backend.java.util.Utils;
-import org.kframework.kil.*;
+import org.kframework.kil.ASTNode;
+import org.kframework.kil.Attribute;
 import org.kframework.main.GlobalOptions;
-import org.kframework.main.Tool;
 import org.kframework.utils.errorsystem.KException.ExceptionType;
 import org.kframework.utils.errorsystem.KExceptionManager;
-import org.kframework.utils.errorsystem.KExceptionManager.KEMException;
+import org.kframework.utils.errorsystem.KEMException;
 
 import java.io.IOException;
 import java.io.ObjectOutputStream;
@@ -24,10 +29,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
-import com.google.common.collect.Sets;
-import com.google.inject.Inject;
-import com.google.inject.Provider;
 
 
 /**
@@ -71,7 +72,7 @@ public class KItem extends Term implements KItemRepresentation {
         kList = KCollection.upKind(kList, Kind.KLIST);
 
         // TODO(yilongli): break the dependency on the Tool object
-        return new KItem(kLabel, kList, termContext, termContext.global().kItemOps.tool, source, location);
+        return new KItem(kLabel, kList, termContext, termContext.global().stage, source, location);
     }
 
     public KItem(Term kLabel, Term kList, Sort sort, boolean isExactSort) {
@@ -100,7 +101,7 @@ public class KItem extends Term implements KItemRepresentation {
         this.enableCache = enableCache;
     }
 
-    private KItem(Term kLabel, Term kList, TermContext termContext, Tool tool, Source source, Location location) {
+    private KItem(Term kLabel, Term kList, TermContext termContext, Stage stage, Source source, Location location) {
         super(Kind.KITEM, source, location);
         this.kLabel = kLabel;
         this.kList = kList;
@@ -112,7 +113,7 @@ public class KItem extends Term implements KItemRepresentation {
             KLabelConstant kLabelConstant = (KLabelConstant) kLabel;
 
             /* at runtime, checks if the result has been cached */
-            enableCache = (tool != Tool.KOMPILE)
+            enableCache = (stage == Stage.REWRITING)
                     && definition.sortPredicateRulesOn(kLabelConstant).isEmpty();
 
             sort = null;
@@ -267,7 +268,7 @@ public class KItem extends Term implements KItemRepresentation {
 
     public static class KItemOperations {
 
-        private final Tool tool;
+        private final Stage stage;
         private final JavaExecutionOptions javaOptions;
         private final KExceptionManager kem;
         private final Provider<BuiltinFunction> builtins;
@@ -275,12 +276,12 @@ public class KItem extends Term implements KItemRepresentation {
 
         @Inject
         public KItemOperations(
-                Tool tool,
+                Stage stage,
                 JavaExecutionOptions javaOptions,
                 KExceptionManager kem,
                 Provider<BuiltinFunction> builtins,
                 GlobalOptions options) {
-            this.tool = tool;
+            this.stage = stage;
             this.javaOptions = javaOptions;
             this.kem = kem;
             this.builtins = builtins;
@@ -309,7 +310,7 @@ public class KItem extends Term implements KItemRepresentation {
                             kItem.applyAnywhereRules(copyOnShareSubstAndEval, context);
                 if (result instanceof KItem && ((KItem) result).isEvaluable(context) && result.isGround()) {
                     // we do this check because this warning message can be very large and cause OOM
-                    if (options.warnings.includesExceptionType(ExceptionType.HIDDENWARNING) && tool != Tool.KOMPILE) {
+                    if (options.warnings.includesExceptionType(ExceptionType.HIDDENWARNING) && stage == Stage.REWRITING) {
                         StringBuilder sb = new StringBuilder();
                         sb.append("Unable to resolve function symbol:\n\t\t");
                         sb.append(result);
@@ -330,7 +331,7 @@ public class KItem extends Term implements KItemRepresentation {
                 }
                 return result;
             } catch (StackOverflowError e) {
-                throw KExceptionManager.criticalError(TRACE_MSG, e);
+                throw KEMException.criticalError(TRACE_MSG, e);
             } catch (KEMException e) {
                 e.exception.addTraceFrame("while evaluating function " + kItem.kLabel().toString());
                 throw e;
@@ -403,7 +404,7 @@ public class KItem extends Term implements KItemRepresentation {
                         if (t instanceof Error) {
                             throw (Error)t;
                         }
-                        if (t instanceof KExceptionManager.KEMException) {
+                        if (t instanceof KEMException) {
                             throw (RuntimeException)t;
                         }
                         if (t instanceof RuntimeException) {
@@ -440,28 +441,19 @@ public class KItem extends Term implements KItemRepresentation {
 
 
                             Map<Variable, Term> solution;
-                            if (rule.getAttribute(Attribute.ASSOCIATIVE_KEY) == null ||
-                                    rule.getAttribute(Attribute.COMMUTATIVE_KEY) == null) {
-                                    /* Use the non-assoc pattern matcher unless explicitely specified*/
-                                solution = NonACPatternMatcher.match(kItem, rule, context);
-                                if (solution == null) {
-                                    continue;
-                                }
+                            List<Substitution<Variable, Term>> matches = PatternMatcher.match(kItem, rule, context);
+                            if (matches.isEmpty()) {
+                                continue;
                             } else {
-                                List<Substitution<Variable, Term>> matches = PatternMatcher.match(kItem, rule, context);
-                                if (matches.isEmpty()) {
-                                    continue;
-                                } else {
-                                    if (matches.size() > 1) {
-                                        if (javaOptions.deterministicFunctions) {
-                                            throw KExceptionManager.criticalError("More than one possible match. " +
-                                                    "Function " + kLabelConstant + " might be non-deterministic.");
-                                        }
-                                        kem.registerInternalWarning("More than one possible match. " +
-                                                "Behaviors might be lost.");
+                                if (matches.size() > 1) {
+                                    if (javaOptions.deterministicFunctions) {
+                                        throw KEMException.criticalError("More than one possible match. " +
+                                                "Function " + kLabelConstant + " might be non-deterministic.");
                                     }
-                                    solution = matches.get(0);
+                                    kem.registerInternalWarning("More than one possible match. " +
+                                            "Behaviors might be lost.");
                                 }
+                                solution = matches.get(0);
                             }
 
                             Term rightHandSide = rule.rightHandSide();
@@ -485,9 +477,9 @@ public class KItem extends Term implements KItemRepresentation {
                                 RuleAuditing.succeed(rule);
                                 owiseResult = rightHandSide;
                             } else {
-                                if (tool == Tool.KRUN) {
+                                if (stage == Stage.REWRITING) {
                                     if (result != null && !result.equals(rightHandSide)) {
-                                        throw KExceptionManager.criticalError("[non-deterministic function definition]: more than one rule can apply to the function\n" + kItem);
+                                        throw KEMException.criticalError("[non-deterministic function definition]: more than one rule can apply to the function\n" + kItem);
                                     }
                                 }
                                 RuleAuditing.succeed(rule);
@@ -518,7 +510,7 @@ public class KItem extends Term implements KItemRepresentation {
                         return result;
                     } else if (owiseResult != null) {
                         if (!kItem.isGround()) {
-                            if (context.global().tool != Tool.KRUN) {
+                            if (context.global().stage != Stage.REWRITING) {
                                 return kItem;
                             }
                             /**
@@ -537,7 +529,7 @@ public class KItem extends Term implements KItemRepresentation {
                                         ConjunctiveFormula.of(context)
                                                 .add(rule.lookups())
                                                 .addAll(rule.requires()));
-                                if (!subject.unify(pattern).isEmpty()) {
+                                if (!subject.unify(pattern, null, null, null).isEmpty()) {
                                     return kItem;
                                 }
                             }
@@ -595,20 +587,26 @@ public class KItem extends Term implements KItemRepresentation {
                     System.err.println("\nAuditing " + rule + "...\n");
                 }
                 /* anywhere rules should be applied by pattern match rather than unification */
-                Map<Variable, Term> solution = NonACPatternMatcher.match(this, rule, context);
-                if (solution != null) {
-                    RuleAuditing.succeed(rule);
-                    Term rightHandSide = rule.rightHandSide();
-                    if (copyOnShareSubstAndEval) {
-                        rightHandSide = rightHandSide.copyOnShareSubstAndEval(
-                                solution,
-                                rule.reusableVariables().elementSet(),
-                                context);
-                    } else {
-                        rightHandSide = rightHandSide.substituteAndEvaluate(solution, context);
-                    }
-                    return rightHandSide;
+                Map<Variable, Term> solution;
+                List<Substitution<Variable, Term>> matches = PatternMatcher.match(this, rule, context);
+                if (matches.isEmpty()) {
+                    continue;
+                } else {
+                    assert matches.size() == 1 : "unexpected non-deterministic anywhere rule " + rule;
+                    solution = matches.get(0);
                 }
+
+                RuleAuditing.succeed(rule);
+                Term rightHandSide = rule.rightHandSide();
+                if (copyOnShareSubstAndEval) {
+                    rightHandSide = rightHandSide.copyOnShareSubstAndEval(
+                            solution,
+                            rule.reusableVariables().elementSet(),
+                            context);
+                } else {
+                    rightHandSide = rightHandSide.substituteAndEvaluate(solution, context);
+                }
+                return rightHandSide;
             } finally {
                 if (RuleAuditing.isAuditBegun()) {
                     if (RuleAuditing.getAuditingRule() == rule) {
@@ -694,16 +692,6 @@ public class KItem extends Term implements KItemRepresentation {
     @Override
     public String toString() {
         return kLabel + "(" + kList.toString() + ")";
-    }
-
-    @Override
-    public void accept(Unifier unifier, Term pattern) {
-        unifier.unify(this, pattern);
-    }
-
-    @Override
-    public void accept(Matcher matcher, Term pattern) {
-        matcher.match(this, pattern);
     }
 
     @Override
