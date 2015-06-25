@@ -143,7 +143,7 @@ public class RewriteEngineUtils {
                 // condition
                 Term evaluatedReq = KAbstractRewriteMachine.construct(rule.instructionsOfRequires().get(i), crntSubst, null, context, false);
                 if (!evaluatedReq.equals(BoolToken.TRUE)) {
-                    if (rule.isLemma() && !evaluatedReq.isGround()
+                    if (/* rule.isLemma() && */ !evaluatedReq.isGround()
                             && context.getTopConstraint() != null
                             && context.getTopConstraint().implies(ConjunctiveFormula.of(context).add(evaluatedReq, BoolToken.TRUE), Collections.emptySet())) {
                         i++;
