@@ -222,7 +222,7 @@ public class SymbolicRewriter {
 //                    }
 //                }
 
-                List<Pair<List<Pair<ConstrainedTerm, Rule>>, Rule>> collectedResults = rules.parallelStream()
+                List<Pair<List<Pair<ConstrainedTerm, Rule>>, Rule>> collectedResults = rules.stream()
                         .map(r -> Pair.of(computeRewriteStepByRule(subject, r), r))
                         .collect(Collectors.toList());
 
