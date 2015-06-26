@@ -73,6 +73,13 @@ public class PatternExpander extends CopyOnWriteTransformer {
                 if (globalConstraint.isFalse() || globalConstraint.checkUnsat()) {
                     continue;
                 }
+                globalConstraint = globalConstraint
+                        .add(outputKList, ruleOutputKList)
+                        .addAll(rule.ensures())
+                        .simplify();
+                if (globalConstraint.isFalse() || globalConstraint.checkUnsat()) {
+                    continue;
+                }
             } else {
                 Set<Variable> existVariables = ruleInputKList.variableSet();
                 unificationConstraint = unificationConstraint.orientSubstitution(existVariables);

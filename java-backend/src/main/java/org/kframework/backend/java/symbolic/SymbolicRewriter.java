@@ -221,7 +221,7 @@ public class SymbolicRewriter {
 //                    }
 //                }
 
-                List<Pair<List<Pair<ConstrainedTerm, Rule>>, Rule>> collectedResults = rules.parallelStream()
+                List<Pair<List<Pair<ConstrainedTerm, Rule>>, Rule>> collectedResults = rules.stream()
                         .map(r -> Pair.of(computeRewriteStepByRule(subject, r), r))
                         .collect(Collectors.toList());
 
@@ -653,6 +653,7 @@ public class SymbolicRewriter {
 
         System.err.println("build time " + rw.elapsed(TimeUnit.MILLISECONDS));
         System.err.println("rules (k/type/total) " + kRules + "/" + typeRules + "/" + totalRules);
+        System.err.println("#failed proofs = " + proofResults.size());
         return proofResults;
     }
 
