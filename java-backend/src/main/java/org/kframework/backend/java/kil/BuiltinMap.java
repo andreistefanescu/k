@@ -299,7 +299,8 @@ public class BuiltinMap extends AssociativeCommutativeCollection {
                     (UnmodifiableMap<Term, Term>) UnmodifiableMap.unmodifiableMap(entries),
                     patternsBuilder.build(),
                     functionsBuilder.build(),
-                    variablesBuilder.build());
+                    variablesBuilder.build(),
+                    context);
             return builtinMap.baseTerms().size() == 1 && builtinMap.collectionVariables().size() == 1 && builtinMap.concreteSize() == 0 ?
                     builtinMap.collectionVariables().iterator().next() : builtinMap;
         }
