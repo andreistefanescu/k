@@ -66,3 +66,5 @@
 (assert (= (smt_seq_sorted smt_seq_nil) true))
 
 (assert (forall ((s IntSeq)) (>= (smt_seq_len s) 0)))
+
+(assert (forall ((e Int) (s IntSet)) (not (= (smt_set_cup (smt_set_ele e) s) smt_set_emp))))
