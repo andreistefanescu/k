@@ -30,9 +30,9 @@ public class GenOperations {
     public static ConjunctiveFormula constraint;
     public static boolean reset;
 
-    public static Variable init(TermContext context) {
+    public static Variable init(StringToken name, StringToken sort, TermContext context) {
         reset = true;
-        return new Variable("state", Sort.MAP);
+        return new Variable(name.stringValue(), Sort.of(sort.stringValue()));
     }
 
     public static StringToken gen(Term state, Term expression, TermContext context) {
