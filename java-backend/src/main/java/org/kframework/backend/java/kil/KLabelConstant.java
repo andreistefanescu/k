@@ -204,7 +204,7 @@ public class KLabelConstant extends KLabel implements MaximalSharing, org.kframe
 
     @Override
     public String toString() {
-        return label;
+        return label + "{" + ordinal + "}";
     }
 
     @Override
