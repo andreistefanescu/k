@@ -92,4 +92,11 @@ public class OneWordBitSet implements BitSet<OneWordBitSet> {
         return new OneWordBitSet(word);
     }
 
+    @Override
+    public String toString() {
+        long words[] = new long[1];
+        words[0] = word;
+        return java.util.BitSet.valueOf(words).toString();
+    }
+
 }

@@ -199,4 +199,14 @@ public class FourWordBitSet implements BitSet<FourWordBitSet> {
         return new FourWordBitSet(word0, word1, word2, word3);
     }
 
+    @Override
+    public String toString() {
+        long words[] = new long[4];
+        words[0] = word0;
+        words[1] = word1;
+        words[2] = word2;
+        words[3] = word3;
+        return java.util.BitSet.valueOf(words).toString();
+    }
+
 }
