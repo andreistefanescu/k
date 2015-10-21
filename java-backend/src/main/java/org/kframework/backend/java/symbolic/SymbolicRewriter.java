@@ -190,6 +190,8 @@ public class SymbolicRewriter {
                 if (!theNew.isGround()) {
                     System.err.println(theNew.variableSet());
                     System.err.println(substitution.keySet());
+                    System.err.println("subject = " + subject);
+                    System.out.println("definition = " + definition.automaton.leftHandSide());
                 }
                 results.add(new ConstrainedTerm(theNew, subject.termContext()));
                 if (computeOne) {
