@@ -172,7 +172,7 @@ public class SymbolicRewriter {
 
     private List<ConstrainedTerm> fastComputeRewriteStep(ConstrainedTerm subject, boolean computeOne) {
         List<ConstrainedTerm> results = new ArrayList<>();
-        List<Pair<Substitution<Variable, Term>, Integer>> matches = theFastMatcher.mainMatch(subject.term(), definition.automaton.leftHandSide(), allRuleBits);
+        List<Pair<Substitution<Variable, Term>, Integer>> matches = theFastMatcher.mainMatch(subject.term(), definition.automaton.leftHandSide(), allRuleBits, false);
         for (Pair<Substitution<Variable, Term>, Integer> pair : matches) {
             Rule rule = definition.ruleTable.get(pair.getRight());
             Substitution<Variable, Term> substitution = RewriteEngineUtils.evaluateConditions(rule, pair.getLeft(), subject.termContext());
@@ -194,6 +194,9 @@ public class SymbolicRewriter {
                     System.err.println("subject = " + subject);
                     System.err.println("definition = " + definition.automaton.leftHandSide());
                     System.err.println("rule{" + pair.getRight() + "} = " + rule);
+                    System.err.println("===");
+                    System.err.println("===\n" + theFastMatcher.mainMatch(subject.term(), definition.automaton.leftHandSide(), allRuleBits, true));
+                    System.err.println("===");
                 }
                 results.add(new ConstrainedTerm(theNew, subject.termContext()));
                 if (computeOne) {

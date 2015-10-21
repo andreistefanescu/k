@@ -49,6 +49,7 @@ public class FastRuleMatcher {
     private final KLabelConstant threadCellBagLabel;
     private final KItem dotThreadCellBag;
 
+    private boolean debug = false;
 
     public FastRuleMatcher(TermContext context, int ruleCount, int variableCount) {
         this.context = context;
@@ -69,8 +70,9 @@ public class FastRuleMatcher {
 
     }
 
-    public List<Pair<Substitution<Variable, Term>, Integer>> mainMatch(Term subject, Term pattern, BitSet ruleMask) {
+    public List<Pair<Substitution<Variable, Term>, Integer>> mainMatch(Term subject, Term pattern, BitSet ruleMask, boolean debug) {
         assert subject.isGround() : subject;
+        this.debug = debug;
 
         ruleMask.stream().forEach(i -> substitutions[i].clear());
         rewrites = new Map[ruleMask.length()];
@@ -89,6 +91,11 @@ public class FastRuleMatcher {
 
     private BitSet match(Term subject, Term pattern, BitSet ruleMask, scala.collection.immutable.List<Integer> path) {
         assert !ruleMask.isEmpty();
+        if (debug) {
+            System.err.println("subject = " + subject);
+            System.err.println("pattern = " + pattern);
+            System.err.println("ruleMask = " + ruleMask);
+        }
         if (pattern instanceof RuleAutomatonDisjunction) {
             RuleAutomatonDisjunction automatonDisjunction = (RuleAutomatonDisjunction) pattern;
             //BitSet returnSet = BitSet.apply(ruleCount);
