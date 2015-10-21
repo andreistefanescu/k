@@ -98,9 +98,7 @@ public class FastRuleMatcher {
         }
         if (pattern instanceof RuleAutomatonDisjunction) {
             RuleAutomatonDisjunction automatonDisjunction = (RuleAutomatonDisjunction) pattern;
-            //BitSet returnSet = BitSet.apply(ruleCount);
-            BitSet returnSet = automatonDisjunction.ruleMask;
-            returnSet.clear();
+            BitSet returnSet = BitSet.apply(ruleCount);
 
             List<Pair<Variable, BitSet>> pairs = automatonDisjunction.variableDisjunctionsArray[subject.sort().ordinal()];
             for (Pair<Variable, BitSet> p : pairs) {
