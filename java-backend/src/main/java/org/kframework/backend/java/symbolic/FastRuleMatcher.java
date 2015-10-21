@@ -74,6 +74,7 @@ public class FastRuleMatcher {
         assert subject.isGround() : subject;
         this.debug = debug;
 
+        synchronized (pattern) {
         ruleMask.stream().forEach(i -> substitutions[i].clear());
         rewrites = new Map[ruleMask.length()];
         ruleMask.stream().forEach(i -> rewrites[i] = new HashMap<>());
@@ -87,6 +88,7 @@ public class FastRuleMatcher {
             theResult.add(Pair.of(substitutions[i], i));
         }
         return theResult;
+        }
     }
 
     private BitSet match(Term subject, Term pattern, BitSet ruleMask, scala.collection.immutable.List<Integer> path) {
