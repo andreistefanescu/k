@@ -108,6 +108,11 @@ public class FastRuleMatcher {
                     BitSet localRuleMask = ruleMask.clone();
                     localRuleMask.and(p.getRight());
                     returnSet.or(add(p.getLeft(), subject, localRuleMask));
+                    if (debug) {
+                        System.err.println(">>>returnSet = " + returnSet);
+                        System.err.println("p = " + p);
+                        System.err.println("sort = " + subject.sort());
+                    }
                 }
             }
 
