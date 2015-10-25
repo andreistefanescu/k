@@ -462,9 +462,9 @@ module KERNELC-SEMANTICS
                  | "beginBasicBlock"
                  | "endBasicBlock"
   syntax KItem ::= addCode(String)
-  syntax KItem ::= "#initialize" "(" String "," String ")"    [function, impure, hook(Gen:init)]
-  syntax String ::= "#generate" "(" Map "," K ")"             [function, impure, hook(Gen:gen)]
-                  | "#name" "(" K ")"                         [function, impure, hook(Gen:name)]
+  syntax KItem ::= "#initialize" "(" String "," String ")"    [function, impure, hook(Gen.init)]
+  syntax String ::= "#generate" "(" Map "," K ")"             [function, impure, hook(Gen.gen)]
+                  | "#name" "(" K ")"                         [function, impure, hook(Gen.name)]
 
   rule extendedBlock(K)
     => beginExtendedBlock

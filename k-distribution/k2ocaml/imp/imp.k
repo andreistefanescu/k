@@ -64,8 +64,8 @@ module IMP
                  | "endExtendedBlock"
                  | "beginBasicBlock"
                  | "endBasicBlock"
-  syntax Map ::= "#initializeState()"                       [function, impure, hook(Gen:init)]
-  syntax String ::= "#generateCode" "(" Map "," Value ")"   [function, impure, hook(Gen:gen)]
+  syntax Map ::= "#initializeState()"                       [function, impure, hook(Gen.init)]
+  syntax String ::= "#generateCode" "(" Map "," Value ")"   [function, impure, hook(Gen.gen)]
   syntax Value ::= Bool | Int
 
   rule extendedBlock(K)
