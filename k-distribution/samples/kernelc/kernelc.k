@@ -28,15 +28,11 @@ module KERNELC
       <env> .Map </env>
       <locals> .List </locals>
       <fun-id> String2Id("") </fun-id>
-      //<stack> .List </stack>
+      <stack> .List </stack>
 
       <heap> .Map </heap>
 
-      //<in stream="stdin"> .List </in>
-      //<out stream="stdout"> .List </out>
-
-      <code> "" </code>
-      <codeStack> .List </codeStack>
+      <in stream="stdin"> .List </in>
       <out stream="stdout"> .List </out>
     </config>
 

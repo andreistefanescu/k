@@ -121,23 +121,23 @@ module KERNELC-SEMANTICS
   /*
    * If/choice
    */
-  //rule if (E:Expression) S1:Statement else S2:Statement
-  //  => expression2bool(E) ~> if (HOLE) S1 else S2
-  //  [heat]
-  //rule B:Bool ~> if (HOLE) S1:Statement else S2:Statement
-  //  => if (B) S1 else S2
-  //  [cool]
-  //rule if( true) S:Statement else _:Statement => S    [structural]
-  //rule if(false) _:Statement else S:Statement => S    [structural]
+  rule if (E:Expression) S1:Statement else S2:Statement
+    => expression2bool(E) ~> if (HOLE) S1 else S2
+    [heat]
+  rule B:Bool ~> if (HOLE) S1:Statement else S2:Statement
+    => if (B) S1 else S2
+    [cool]
+  rule if( true) S:Statement else _:Statement => S    [structural]
+  rule if(false) _:Statement else S:Statement => S    [structural]
 
-  //rule E1:Expression ? E2:Expression : E3:Expression
-  //  => expression2bool(E1) ~> HOLE ? E2 : E3
-  //  [heat]
-  //rule B:Bool ~> HOLE ? E1:Expression : E2:Expression
-  //  => B ? E1 : E2
-  //  [cool]
-  //rule  true ? E:Expression : _:Expression => E   [structural]
-  //rule false ? _:Expression : E:Expression => E   [structural]
+  rule E1:Expression ? E2:Expression : E3:Expression
+    => expression2bool(E1) ~> HOLE ? E2 : E3
+    [heat]
+  rule B:Bool ~> HOLE ? E1:Expression : E2:Expression
+    => B ? E1 : E2
+    [cool]
+  rule  true ? E:Expression : _:Expression => E   [structural]
+  rule false ? _:Expression : E:Expression => E   [structural]
 
   syntax KItem ::= "expression2bool" "(" Expression ")"           [strict]
   rule expression2bool(tv(int, I:Int)) => I =/=K 0                [structural]
@@ -147,49 +147,49 @@ module KERNELC-SEMANTICS
   /*
    * while
    */
-  //rule while (E:Expression) S:Statement => if (E) { S while(E) S }
-  //  [structural]
+  rule while (E:Expression) S:Statement => if (E) { S while(E) S }
+    [structural]
 
 
   /*
    * Function call/return
    */
   syntax KItem ::= callStackFrame(K, Map, List, Id)
-  //rule
-  //  <fun>...
-  //    Callee |-> functionBody(PDs:ParameterDeclarations, _:Type, B:Block)
-  //  ...</fun>
-  //  <k>
-  //    Callee:Id(EEs:EvaluatedExpressions) ~> K
-  //  =>
-  //    { declareParameters(PDs) bindParameters(PDs, EEs, B) }
-  //  </k>
-  //  <stack>
-  //    .List => ListItem(callStackFrame(K, Env, Locals, Caller))
-  //  ...</stack>
-  //  <fun-id> Caller:Id => Callee </fun-id>
-  //  <env> Env:Map => .Map </env>
-  //  <locals> Locals:List => .List </locals>
-  //  // TODO: handle special function more generically
-  //  requires Callee =/=K malloc andBool Callee =/=K free
-  //   andBool Callee =/=K scanf andBool Callee =/=K printf
-  //rule
-  //  <fun>...
-  //    Callee |-> functionBody(_:ParameterDeclarations, T, _:Block)
-  //  ...</fun>
-  //  <k>
-  //    return tv(T:Type, V:Value); ~> _
-  //  =>
-  //    deleteLocals(values(CalleeEnv)) ~> tv(T, V) ~> K
-  //  </k>
-  //  <stack>
-  //    ListItem(callStackFrame(K, CallerEnv:Map, CallerLocals:List, Caller:Id))
-  //  =>
-  //    .List
-  //  ...</stack>
-  //  <fun-id> Callee:Id => Caller </fun-id>
-  //  <env> CalleeEnv:Map => CallerEnv </env>
-  //  <locals> _:List => CallerLocals </locals>
+  rule
+    <fun>...
+      Callee |-> functionBody(PDs:ParameterDeclarations, _:Type, B:Block)
+    ...</fun>
+    <k>
+      Callee:Id(EEs:EvaluatedExpressions) ~> K
+    =>
+      { declareParameters(PDs) bindParameters(PDs, EEs, B) }
+    </k>
+    <stack>
+      .List => ListItem(callStackFrame(K, Env, Locals, Caller))
+    ...</stack>
+    <fun-id> Caller:Id => Callee </fun-id>
+    <env> Env:Map => .Map </env>
+    <locals> Locals:List => .List </locals>
+    // TODO: handle special function more generically
+    requires Callee =/=K malloc andBool Callee =/=K free
+     andBool Callee =/=K scanf andBool Callee =/=K printf
+  rule
+    <fun>...
+      Callee |-> functionBody(_:ParameterDeclarations, T, _:Block)
+    ...</fun>
+    <k>
+      return tv(T:Type, V:Value); ~> _
+    =>
+      deleteLocals(values(CalleeEnv)) ~> tv(T, V) ~> K
+    </k>
+    <stack>
+      ListItem(callStackFrame(K, CallerEnv:Map, CallerLocals:List, Caller:Id))
+    =>
+      .List
+    ...</stack>
+    <fun-id> Callee:Id => Caller </fun-id>
+    <env> CalleeEnv:Map => CallerEnv </env>
+    <locals> _:List => CallerLocals </locals>
 
 
   /*
@@ -409,19 +409,19 @@ module KERNELC-SEMANTICS
   /*
    * I/O
    */
-  //rule
-  //  <k>
-  //    scanf(_:String, tv(int *, P:Pointer))
-  //  =>
-  //    tv(int *, P) = tv(int, I); ~> tv(void, undef)
-  //  ...</k>
-  //  <in> ListItem(I:Int) => .List ...</in>
-  //  [structural]
-  //rule
-  //  <k> printf(_:String, tv(int, I:Int)) => tv(void, undef) ...</k>
-  //  <out>... .List => ListItem(I) </out>
-  //  [structural]
-  //rule printf(_:String) => tv(void, undef)   [structural]
+  rule
+    <k>
+      scanf(_:String, tv(int *, P:Pointer))
+    =>
+      tv(int *, P) = tv(int, I); ~> tv(void, undef)
+    ...</k>
+    <in> ListItem(I:Int) => .List ...</in>
+    [structural]
+  rule
+    <k> printf(_:String, tv(int, I:Int)) => tv(void, undef) ...</k>
+    <out>... .List => ListItem(I) </out>
+    [structural]
+  rule printf(_:String) => tv(void, undef)   [structural]
 
 
   /*
@@ -453,70 +453,4 @@ module KERNELC-SEMANTICS
     => X = TV; bindParameters(PDs, EEs, B)
   rule bindParameters(.ParameterDeclarations, .EvaluatedExpressions, B:Block)
     => B .Statements
-
-
-  //----------------------------------------------------------------------------
-  syntax KItem ::= extendedBlock(K)
-                 | "beginExtendedBlock"
-                 | "endExtendedBlock"
-                 | "beginBasicBlock"
-                 | "endBasicBlock"
-  syntax KItem ::= "#initialize" "(" String "," String ")"    [function, impure, hook(Gen:init)]
-  syntax String ::= "#generate" "(" Map "," K ")"             [function, impure, hook(Gen:gen)]
-
-  rule extendedBlock(K)
-    => beginExtendedBlock
-       ~> beginBasicBlock
-       ~> K
-       ~> endBasicBlock
-       ~> endExtendedBlock
-    [macro]
-  rule
-    <k> beginExtendedBlock => .K ...</k>
-    <code> C:String => "" </code>
-    <codeStack>... .List => ListItem(C) </codeStack>
-  rule
-    <k> endExtendedBlock => C1 ...</k>
-    <code> C1:String => C2 </code>
-    <codeStack>... ListItem(C2:String) => .List </codeStack>
-
-  rule
-    <k> beginBasicBlock => .K ...</k>
-    <heap> _:Map => #initialize("heap") </heap>
-
-  rule
-    <k> endBasicBlock => #generate(M, .K) ...</k>
-    <heap> M:Map </heap>
-  rule
-    <k> V:Value ~> endBasicBlock => #generate(M, V) ...</k>
-    <heap> M:Map </heap>
-
-  syntax KItem ::= if(Expression, Statement, Statement)
-                 | choice(Expression, Expression, Expression)
-                 | while(Expression, Statement)
-  syntax KResult ::= String
-  syntax Expression ::= String
-  syntax Statement ::= String
-  rule if(E, S1, S2) => extendedBlock(E) ~> if(HOLE, S1, S2)            [heat]
-  rule K:KResult ~> if(HOLE, S1, S2) => if(K, S1, S2)                   [cool]
-  rule if(E, S1, S2) => extendedBlock(S1) ~> if(E, HOLE, S2)            [heat]
-  rule K:KResult ~> if(E, HOLE, S2)  => if(E, K, S2)                    [cool]
-  rule if(E, S1, S2) => extendedBlock(S2) ~> if(E, S1, HOLE)            [heat]
-  rule K:KResult ~> if(E, S1, HOLE)  => if(E, S1, K)                    [cool]
-  rule choice(E1, E2, E3) => extendedBlock(E1) ~> choice(HOLE, E2, E3)  [heat]
-  rule K:KResult ~> choice(HOLE, E1, E2) => choice(K, E1, E2)           [cool]
-  rule choice(E1, E2, E3) => extendedBlock(E2) ~> choice(E1, HOLE, E3)  [heat]
-  rule K:KResult ~> choice(E1, HOLE, E2) => choice(E1, K, E2)           [cool]
-  rule choice(E1, E2, E3) => extendedBlock(E3) ~> choice(E1, E2, HOLE)  [heat]
-  rule K:KResult ~> choice(E1, E2, HOLE) => choice(E1, E2, K)           [cool]
-  rule while(E, S) => extendedBlock(E) ~> while(HOLE, S)                [heat]
-  rule K:KResult ~> while(HOLE, S) => while(K, S)                       [cool]
-  rule while(E, S) => extendedBlock(S) ~> while(E, HOLE)                [heat]
-  rule K:KResult ~> while(E, HOLE) => while(E, K)                       [cool]
-
-  rule if (E) S1 else S2 => endBasicBlock ~> if(E, S1, S2)      ~> beginBasicBlock
-  rule E1 ? E2 : E3      => endBasicBlock ~> choice(E1, E2, E3) ~> beginBasicBlock
-  rule while (E) S       => endBasicBlock ~> while(E, S)        ~> beginBasicBlock
-
-
 endmodule
