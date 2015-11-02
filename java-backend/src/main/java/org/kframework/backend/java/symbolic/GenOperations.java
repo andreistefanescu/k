@@ -29,6 +29,9 @@ public class GenOperations {
 
     public static ConjunctiveFormula constraint;
     public static boolean reset;
+    private static final String MAP_EMPTY = "ImpMap.empty";
+    private static final String MAP_ADD = "ImpMap.add";
+    private static final String MAP_FIND = "ImpMap.find";
 
     public static Variable init(StringToken name, StringToken sort, TermContext context) {
         reset = true;
@@ -36,38 +39,51 @@ public class GenOperations {
     }
 
     public static StringToken gen(Term state, Term expression, TermContext context) {
-        String result = "let state = !stateRef in ";
+        try {
+            String result = "let state = !stateRef in ";
 
-        String constraintString = "";
-        for (Equality equality : constraint.equalities()) {
-            if (DataStructures.isLookup(equality.leftHandSide())) {
-                // TODO: fix order of lookups
-                constraintString = "let " + toOCaml(equality.rightHandSide()) + " = " + toOCaml(equality.leftHandSide()) + " in " + constraintString;
-            } else {
-                constraintString = constraintString + "if " + toOCaml(equality.leftHandSide()) + " <> " + toOCaml(equality.rightHandSide()) + " then raise Side_Condition_Failure; ";
+            String constraintString = "";
+            for (Equality equality : constraint.equalities()) {
+                if (DataStructures.isLookup(equality.leftHandSide())) {
+                    // TODO: fix order of lookups
+                    constraintString = "let " + toOCaml(equality.rightHandSide()) + " = " + toOCaml(equality.leftHandSide()) + " in " + constraintString;
+                } else {
+                    constraintString = constraintString + "if " + toOCaml(equality.leftHandSide()) + " <> " + toOCaml(equality.rightHandSide()) + " then raise Side_Condition_Failure; ";
+                }
             }
+            result = result + constraintString;
+
+            result = result + "stateRef := " + toOCaml(state);
+
+            if (!expression.equals(KSequence.EMPTY)) {
+                result = result + "; " + toOCaml(expression);
+            }
+
+            return StringToken.of("(" + result + ")");
+        } catch (AssertionError | ClassCastException e) {
+            return StringToken.of("#error(" + state + "; " + expression + ")");
         }
-        result = result + constraintString;
+    }
 
-        result = result + "stateRef := " + toOCaml(state);
-
-        if (!expression.equals(KSequence.EMPTY)) {
-            result = result + "; " + toOCaml(expression);
-        }
-
-        return StringToken.of("(" + result + ")");
+    public static StringToken name(Variable variable, TermContext context) {
+        return StringToken.of(variable.name());
     }
 
     private static String toOCaml(Term term) {
         return ((SMTLibTerm) term.accept(new KILtoOCaml())).expression();
     }
 
-    public static class KILtoOCaml extends CopyOnWriteTransformer {
+    private static class KILtoOCaml extends CopyOnWriteTransformer {
 
         public final ImmutableMap<String, String> infix = ImmutableMap.<String, String>builder()
                 .put("'_+Int_", "+")
+                .put("'_-Int_", "-")
+                .put("'_*Int_", "*")
                 .put("'_/Int_", "/")
+                .put("'_<Int_", "<")
                 .put("'_<=Int_", "<=")
+                .put("'_>Int_", ">")
+                .put("'_>=Int_", ">=")
                 .put("'_andBool_", "&&")
                 .put("'_orBool_", "||")
                 .put("'_==K_", "=")
@@ -76,7 +92,17 @@ public class GenOperations {
                 .build();
         public final ImmutableMap<String, String> prefix = ImmutableMap.<String, String>builder()
                 .put("'notBool_", "not")
-                .put("Map:lookup", "ImpMap.find")
+                .put("Map:lookup", MAP_FIND)
+                .build();
+        public final ImmutableMap<String, String> constructors = ImmutableMap.<String, String>builder()
+                .put("'object(_)", "C_pointer_object")
+                .put("'null", "C_pointer_null")
+                .put("'int", "C_type_int")
+                .put("'double", "C_type_double")
+                .put("'_*", "C_type_pointer")
+                .put("'struct_", "C_type_struct")
+                .put("'tv(_,_)", "C_typed_value")
+                .put("'undef", "C_value_undef")
                 .build();
 
         @Override
@@ -85,68 +111,64 @@ public class GenOperations {
         }
 
         @Override
-        public ASTNode transform(IntToken intToken) {
+        public SMTLibTerm transform(IntToken intToken) {
             return new SMTLibTerm(intToken.bigIntegerValue().toString());
         }
 
         @Override
-        public ASTNode transform(UninterpretedToken uninterpretedToken) {
+        public SMTLibTerm transform(UninterpretedToken uninterpretedToken) {
             if (uninterpretedToken.sort().equals(Sort.of("Id"))) {
                 return new SMTLibTerm("\"" + uninterpretedToken.value() + "\"");
             } else {
-                throw new UnsupportedOperationException();
+                throw new AssertionError();
             }
         }
 
         @Override
-        public ASTNode transform(Token token) {
+        public SMTLibTerm transform(Token token) {
             throw new UnsupportedOperationException();
         }
 
         @Override
-        public ASTNode transform(Variable variable) {
+        public SMTLibTerm transform(Variable variable) {
             return new SMTLibTerm(variable.name());
         }
 
         @Override
-        public ASTNode transform(KItem kItem) {
+        public SMTLibTerm transform(KItem kItem) {
             if (!(kItem.kLabel() instanceof KLabelConstant)) {
-                throw new UnsupportedOperationException();
+                throw new AssertionError();
             }
             KLabelConstant kLabel = (KLabelConstant) kItem.kLabel();
 
             if (!(kItem.kList() instanceof KList)) {
-                throw new UnsupportedOperationException();
+                throw new AssertionError();
             }
             KList kList = (KList) kItem.kList();
 
             if (kList.hasFrame()) {
-                throw new UnsupportedOperationException();
+                throw new AssertionError();
             }
 
-            if (kLabel.label().equals("'updateMap")) {
-                return new SMTLibTerm("(ImpMap.add "
+            if (kLabel.label().equals("call")) {
+                return new SMTLibTerm("(" + ((UninterpretedToken) kList.get(0)).value() + " " +  ")")
+            } else if (kLabel.label().equals(DataStructures.MAP_UPDATE)) {
+                return new SMTLibTerm("(" + MAP_ADD + " "
                         + ((SMTLibTerm) ((BuiltinMap) kList.get(1)).getEntries().entrySet().iterator().next().getKey().accept(this)).expression()
                         + " "
                         + ((SMTLibTerm) ((BuiltinMap) kList.get(1)).getEntries().entrySet().iterator().next().getValue().accept(this)).expression()
                         + " "
                         + ((SMTLibTerm) kList.get(0).accept(this)).expression() + ")");
             } else {
-                if (!infix.containsKey(kLabel.label()) && !prefix.containsKey(kLabel.label())) {
-                    throw new UnsupportedOperationException();
-                }
-
                 List<String> arguments = kList.getContents().stream()
                         .map(t -> ((SMTLibTerm) t.accept(this)).expression())
                         .collect(Collectors.toList());
 
                 if (infix.containsKey(kLabel.label())) {
-                    if (arguments.size() != 2) {
-                        throw new UnsupportedOperationException();
-                    }
+                    assert arguments.size() == 2;
                     return new SMTLibTerm("(" + arguments.get(0) + " " + infix.get(kLabel.label()) + " " + arguments.get(1) + ")");
-                } else {
-                    if (kLabel.label().equals("Map:lookup")) {
+                } else if (prefix.containsKey(kLabel.label())) {
+                    if (kLabel.label().equals(DataStructures.MAP_LOOKUP)) {
                         if (arguments.size() != 2) {
                             throw new UnsupportedOperationException();
                         }
@@ -160,19 +182,33 @@ public class GenOperations {
                     arguments.stream().forEach(s -> sb.append(" ").append(s));
                     sb.append(")");
                     return new SMTLibTerm(sb.toString());
+                } else if (constructors.containsKey(kLabel.label())) {
+                    StringBuilder sb = new StringBuilder();
+                    sb.append("(");
+                    sb.append(constructors.get(kLabel.label()));
+                    if (!arguments.isEmpty()) {
+                        sb.append(" (");
+                        arguments.stream().reduce(((s1, s2) -> s1 + ", " + s2));
+                        sb.append(")");
+                    }
+                    sb.append(")");
+                    return new SMTLibTerm(sb.toString());
+                } else {
+                    throw new AssertionError();
                 }
+
             }
         }
 
         @Override
-        public ASTNode transform(BuiltinMap builtinMap) {
-            if (!builtinMap.isConcreteCollection()) {
-                throw new UnsupportedOperationException();
+        public SMTLibTerm transform(BuiltinMap builtinMap) {
+            if (!builtinMap.isConcreteCollection() && !builtinMap.hasFrame()) {
+                throw new AssertionError();
             }
 
-            String result = "ImpMap.empty";
+            String result = builtinMap.hasFrame() ? transform(builtinMap.frame()).expression() : MAP_EMPTY;
             for (Map.Entry<Term, Term> entry : builtinMap.getEntries().entrySet()) {
-                result = "(ImpMap.add "
+                result = "(" + MAP_ADD + " "
                         + ((SMTLibTerm) entry.getKey().accept(this)).expression()
                         + " "
                         + ((SMTLibTerm) entry.getValue().accept(this)).expression()
@@ -183,4 +219,5 @@ public class GenOperations {
             return new SMTLibTerm(result);
         }
     }
+
 }

@@ -86,11 +86,11 @@ module KERNELC-SYNTAX
                     | String
   syntax Expressions ::= List{Expression, ","}          [seqstrict]
 
-  syntax Id ::= "main"
-              | "malloc"
-              | "free"
-              | "scanf"
-              | "printf"
+  syntax Id ::= "main"   [token]
+              | "malloc" [token]
+              | "free"   [token]
+              | "scanf"  [token]
+              | "printf" [token]
 
 
   /*

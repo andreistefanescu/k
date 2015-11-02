@@ -54,7 +54,8 @@ module KERNELC-SEMANTICS
   syntax KItem ::= functionBody(ParameterDeclarations, Type, Block)
   rule
     <k> T:Type F:Id(PDs:ParameterDeclarations) B:Block => .K ...</k>
-    <fun>... .Map => F |-> functionBody(PDs, T, { B return; }) ...</fun>
+    //<fun>... .Map => F |-> functionBody(PDs, T, { B return; }) ...</fun>
+    <fun>... .Map => F |-> functionBody(PDs, T, B) ...</fun>
     [structural]
   /* Elide function declarations */
   rule T:Type F:Id(PDs:ParameterDeclarations); => .K   [structural]
@@ -72,7 +73,7 @@ module KERNELC-SEMANTICS
   rule
     <k> T:Type X:Id; => .K ...</k>
     <env> Env:Map => Env[X <- tv(T *, object(!I:Int))] </env>
-    <heap>... .Map => object(!I) |-> tv(T, undef) ...</heap>
+    <localMemory>... .Map => object(!I) |-> tv(T, undef) ...</localMemory>
     <locals>... .List => ListItem(tv(T *, object(!I:Int))) </locals>
     [structural]
 
@@ -88,7 +89,7 @@ module KERNELC-SEMANTICS
   /*
    * Sequence point
    */
-  rule _:TypedValue; => .K    [structural]
+  //rule _:TypedValue; => .K    [structural]
   rule ; => .K                [structural]
 
 
@@ -113,7 +114,7 @@ module KERNELC-SEMANTICS
   syntax KItem ::= deleteLocals(List)
   rule
     <k> deleteLocals((ListItem(tv(_:Type, P:Pointer)) => .List) L:List) ...</k>
-    <heap>... P |-> _ => .Map...</heap>
+    <localMemory>... P |-> _ => .Map...</localMemory>
     [structural]
   rule deleteLocals(.List) => .K    [structural]
 
@@ -217,7 +218,7 @@ module KERNELC-SEMANTICS
   /* memory read */
   rule
     <k> *tv(T:Type *, object(I:Int)) => tv(T, V) ...</k>
-    <heap>... object(I) |-> tv(T, V:Value) ...</heap>
+    <localMemory>... object(I) |-> tv(T, V:Value) ...</localMemory>
     requires V =/=K undef
     [transition]
   rule
@@ -231,7 +232,7 @@ module KERNELC-SEMANTICS
   rule TV:TypedValue ~> HOLE = E:EvaluatedExpression; => TV = E;      [cool]
   rule
     <k> tv(T:Type *, object(I:Int)) = tv(T, V:Value); => .K ...</k>
-    <heap>... object(I) |-> tv(T, _:Value => V) ...</heap>
+    <localMemory>... object(I) |-> tv(T, _:Value => V) ...</localMemory>
     requires V =/=K undef
     [transition]
   rule
@@ -484,12 +485,13 @@ module KERNELC-SEMANTICS
 
   rule
     <k> beginBasicBlock => .K ...</k>
-    <heap> _:Map => #initialize("heap") </heap>
+    <heap> _:Map => #initialize("heap", "Map") </heap>
+    <localMemory> _:Map => #initialize("localMemory", "Map") </localMemory>
   rule
     <k> endBasicBlock => addCode(#generate(M, .K))  ...</k>
     <heap> M:Map </heap>
   rule
-    <k> V:Value ~> endBasicBlock => addCode(#generate(M, V)) ...</k>
+    <k> TV:TypedValue ~> endBasicBlock => addCode(#generate(M, TV)) ...</k>
     <heap> M:Map </heap>
 
   rule
@@ -532,32 +534,47 @@ module KERNELC-SEMANTICS
   rule while(E:String, S:String)
     => addCode("while " +String E +String " do " +String S +String "done")
 
+  rule _:TypedValue; => endBasicBlock ~> beginBasicBlock    [structural]
+
+  syntax Value ::= call(Id, EvaluatedExpressions)
+  syntax TypedValue ::= return(Value)
+  rule
+    <k> F:Id(EEs:EvaluatedExpressions) => tv(T, call(F, EEs)) ...</k>
+    <fun>... F |-> functionBody(_:ParameterDeclarations, T:Type, _:Block) ...</fun>
+  //rule malloc(EEs:EvaluatedExpressions) => tv(void *, call(F, EEs))
+  rule F:Id(EEs:EvaluatedExpressions) => tv(void, call(F, EEs))
+    requires F ==K free orBool F ==K scanf orBool F ==K printf
+  rule
+    <k> return tv(T:Type, V:Value); => endBasicBlock ~> addCode("return := ") ~> beginBasicBlock ...</k>
+    <fun>... F |-> functionBody(_:ParameterDeclarations, T:Type, _:Block) ...</fun>
+    <fun-id> F:Id </fun-id>
+
   syntax KItem ::= "generate1"
                  | generate2(Set)
-                 | generate3(Id, EvaluatedExpressions)
+                 | generate3(Id)
+                 | generate4(Id, EvaluatedExpressions)
   rule
     <k> generate1 => generate2(keys(Funs)) </k>
-    <funs> Funs:Map </funs>
+    <fun> Funs:Map </fun>
+  rule (.K => generate3(F)) ~> generate2((SetItem(F:Id) => .Set) S:Set)
+  rule
+    <k> generate3(F:Id) => generate4(F, makeTypedArguments(PDs)) ...</k>
+    <fun>... F |-> functionBody(PDs:ParameterDeclarations, _:Type, _:Block) ...</fun>
   rule
     <k>
-      (.K => generate3(F, makeTypedArguments(PDs)))
-      ~> generate2((SetItem(F:Id) => .Set) S:Set)
-    </k>
-    <funs>... F |-> functionBody(PDs:ParameterDeclarations, _:Type, _:Block) ...</funs>
-  rule
-    <k>
-      generate3(F:Id, EEs:EvaluatedExpressions)
+      generate4(F:Id, EEs:EvaluatedExpressions)
     =>
-      addCode("let rec " +String Id2String(F) +String +String " =\n ")
+      addCode("let rec " +String Id2String(F) +String getParameterNames(EEs) +String " =\n ")
       ~> extendedBlock({ declareParameters(PDs) bindParameters(PDs, EEs, B) })
     ...</k>
-    <funs>... F |-> functionBody(PDs:ParameterDeclarations, _:Type, B:Block) ...</funs>
+    <fun>... F |-> functionBody(PDs:ParameterDeclarations, _:Type, B:Block) ...</fun>
+    <fun-id> _ => F </fun-id>
 
   rule
     <k> (C2:String => .K) ~> generate2(_:Set) </k>
     <code> C1:String => C1 +String C2 +String "\n;;\n" </code>
   rule
-    <k> generare2(.Set) => .K </k>
+    <k> generate2(.Set) => .K </k>
     <code> C:String </code>
     <out>...
       .List
@@ -565,6 +582,14 @@ module KERNELC-SEMANTICS
       ListItem(
         "module ImpMap = Map.Make(String);;\n"
         +String "exception Side_Condition_Failure;;\n"
+        +String "type c_pointer = C_pointer_object of int | C_pointer_null;;\n"
+        +String "type c_type = C_type_int | C_type_double | C_type_pointer of c_type | C_type_struct of string;;\n"
+        +String "type c_value = C_value_int of int | C_value_float of float | C_value_pointer of c_pointer | C_value_undef;;\n"
+        +String "type c_typed_value type = C_typed_value of c_type * c_value;;"
+        +String ""
+        +String ""
+        +String ""
+        +String ""
         +String "let stateRef = ref ImpMap.empty;;\n"
         +String C +String ";;\n"
         +String "ImpMap.iter (fun key value ->  print_string(key ^ \" \" ^ (string_of_int value)^ \"\\n\")) !stateRef;;\n")
@@ -575,9 +600,9 @@ module KERNELC-SEMANTICS
     =>  valueOfType(T), makeTypedArguments(PDs)
   rule makeTypedArguments(.ParameterDeclarations) => .EvaluatedExpressions
   syntax TypedValue ::= valueOfType(Type)   [function]
-  rule valueOfType(int) => ?_:Int
-  rule valueOfType(double) => ?_:Float
-  rule valueOfType(T:Type *) => ?_:Pointer
+  rule valueOfType(int) => tv(int, ?_:Int)
+  rule valueOfType(double) => tv(double, ?_:Float)
+  rule valueOfType(T:Type *) => tv(T:Type *, ?_:Pointer)
   syntax String ::= getParameterNames(EvaluatedExpressions)   [function]
   rule getParameterNames(tv(_:Type, V:Value), EEs:EvaluatedExpressions)
     => " " +String #name(V)  +String getParameterNames(EEs)
