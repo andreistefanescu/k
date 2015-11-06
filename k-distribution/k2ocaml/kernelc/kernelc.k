@@ -30,8 +30,8 @@ module KERNELC
       <fun-id> String2Id("") </fun-id>
       //<stack> .List </stack>
 
-      <heap> .Map </heap>
-      <localMemory> .Map </localMemory>
+      <heapMemory> .Map </heapMemory>
+      <stackMemory> .Map </stackMemory>
 
       //<in stream="stdin"> .List </in>
       //<out stream="stdout"> .List </out>

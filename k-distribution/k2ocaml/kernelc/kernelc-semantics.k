@@ -73,7 +73,7 @@ module KERNELC-SEMANTICS
   rule
     <k> T:Type X:Id; => .K ...</k>
     <env> Env:Map => Env[X <- tv(T *, object(!I:Int))] </env>
-    <localMemory>... .Map => object(!I) |-> tv(T, undef) ...</localMemory>
+    <stackMemory>... .Map => object(!I) |-> tv(T, undef) ...</stackMemory>
     <locals>... .List => ListItem(tv(T *, object(!I:Int))) </locals>
     [structural]
 
@@ -114,7 +114,7 @@ module KERNELC-SEMANTICS
   syntax KItem ::= deleteLocals(List)
   rule
     <k> deleteLocals((ListItem(tv(_:Type, P:Pointer)) => .List) L:List) ...</k>
-    <localMemory>... P |-> _ => .Map...</localMemory>
+    <stackMemory>... P |-> _ => .Map...</stackMemory>
     [structural]
   rule deleteLocals(.List) => .K    [structural]
 
@@ -218,12 +218,12 @@ module KERNELC-SEMANTICS
   /* memory read */
   rule
     <k> *tv(T:Type *, object(I:Int)) => tv(T, V) ...</k>
-    <localMemory>... object(I) |-> tv(T, V:Value) ...</localMemory>
+    <stackMemory>... object(I) |-> tv(T, V:Value) ...</stackMemory>
     requires V =/=K undef
     [transition]
   rule
     <k> *tv(T:Type *, member(I:Int, F:Id)) => tv(T, V) ...</k>
-    <heap>... object(I) |-> (F |-> tv(T, V:Value) _:Map) ...</heap>
+    <heapMemory>... object(I) |-> (F |-> tv(T, V:Value) _:Map) ...</heapMemory>
     requires V =/=K undef
     [transition]
 
@@ -232,12 +232,12 @@ module KERNELC-SEMANTICS
   rule TV:TypedValue ~> HOLE = E:EvaluatedExpression; => TV = E;      [cool]
   rule
     <k> tv(T:Type *, object(I:Int)) = tv(T, V:Value); => .K ...</k>
-    <localMemory>... object(I) |-> tv(T, _:Value => V) ...</localMemory>
+    <stackMemory>... object(I) |-> tv(T, _:Value => V) ...</stackMemory>
     requires V =/=K undef
     [transition]
   rule
     <k> tv(T:Type *, member(I:Int, F:Id)) = tv(T, V:Value); => .K ...</k>
-    <heap>... object(I) |-> (F |-> tv(T, _:Value => V) _:Map) ...</heap>
+    <heapMemory>... object(I) |-> (F |-> tv(T, _:Value => V) _:Map) ...</heapMemory>
     requires V =/=K undef
     [transition]
 
@@ -386,7 +386,7 @@ module KERNELC-SEMANTICS
     =>
       tv(struct S *, object(!I:Int))
     ...</k>
-    <heap>... .Map => object(!I) |-> initializeObject(Members) ...</heap>
+    <heapMemory>... .Map => object(!I) |-> initializeObject(Members) ...</heapMemory>
     <struct>... S |-> Members:Map ...</struct>
     when Size ==K size(Members)
     [structural]
@@ -398,13 +398,13 @@ module KERNELC-SEMANTICS
     =>
       tv(struct S *, object(!I:Int))
     ...</k>
-    <heap>... .Map => object(!I) |-> initializeObject(Members) ...</heap>
+    <heapMemory>... .Map => object(!I) |-> initializeObject(Members) ...</heapMemory>
     <struct>... S |-> Members:Map ...</struct>
     when Size ==K size(Members)
     [structural]
   rule
     <k> free(tv(T:Type *, object(I:Int))) => tv(void, undef) ...</k>
-    <heap>... object(I) |-> _ => .Map ...</heap>
+    <heapMemory>... object(I) |-> _ => .Map ...</heapMemory>
 
 
   /*
@@ -485,14 +485,16 @@ module KERNELC-SEMANTICS
 
   rule
     <k> beginBasicBlock => .K ...</k>
-    <heap> _:Map => #initialize("heap", "Map") </heap>
-    <localMemory> _:Map => #initialize("localMemory", "Map") </localMemory>
+    <heapMemory> _:Map => #initialize("heapMemory", "Map") </heapMemory>
+    <stackMemory> _:Map => #initialize("stackMemory", "Map") </stackMemory>
   rule
-    <k> endBasicBlock => addCode(#generate(M, .K))  ...</k>
-    <heap> M:Map </heap>
+    <k> endBasicBlock => addCode(#generate(M2, .K))  ...</k>
+    <heapMemory> M1:Map </heapMemory>
+    <stackMemory> M2:Map </stackMemory>
   rule
-    <k> TV:TypedValue ~> endBasicBlock => addCode(#generate(M, TV)) ...</k>
-    <heap> M:Map </heap>
+    <k> TV:TypedValue ~> endBasicBlock => addCode(#generate(M2, TV)) ...</k>
+    <heapMemory> M1:Map </heapMemory>
+    <stackMemory> M2:Map </stackMemory>
 
   rule
     <k> addCode(C2:String) => .K ...</k>
@@ -536,16 +538,21 @@ module KERNELC-SEMANTICS
 
   rule _:TypedValue; => endBasicBlock ~> beginBasicBlock    [structural]
 
-  syntax Value ::= call(Id, EvaluatedExpressions)
+  syntax Value ::= call(Id, Values)
   syntax TypedValue ::= return(Value)
   rule
-    <k> F:Id(EEs:EvaluatedExpressions) => tv(T, call(F, EEs)) ...</k>
+    <k> F:Id(EEs:EvaluatedExpressions) => tv(T, call(F, getArgumentValues(EEs))) ...</k>
     <fun>... F |-> functionBody(_:ParameterDeclarations, T:Type, _:Block) ...</fun>
   //rule malloc(EEs:EvaluatedExpressions) => tv(void *, call(F, EEs))
-  rule F:Id(EEs:EvaluatedExpressions) => tv(void, call(F, EEs))
+  rule F:Id(EEs:EvaluatedExpressions) => tv(void, call(F, getArgumentValues(EEs)))
     requires F ==K free orBool F ==K scanf orBool F ==K printf
   rule
-    <k> return tv(T:Type, V:Value); => endBasicBlock ~> addCode("return := ") ~> beginBasicBlock ...</k>
+    <k>
+      return tv(T:Type, V:Value);
+    =>
+      deleteLocals(values(Env)) ~> return(V) ~> endBasicBlock// ~> endExtendedBlock
+    ...</k>
+    <env> Env:Map </env>
     <fun>... F |-> functionBody(_:ParameterDeclarations, T:Type, _:Block) ...</fun>
     <fun-id> F:Id </fun-id>
 
@@ -580,7 +587,9 @@ module KERNELC-SEMANTICS
       .List
     =>
       ListItem(
-        "module ImpMap = Map.Make(String);;\n"
+        "module HeapMap = Map.Make(c_pointer);;\n"
+        +String "module ObjectMap = Map.Make(String);;\n"
+        +String "module LocalMap = Map.Make(c_pointer);;\n"
         +String "exception Side_Condition_Failure;;\n"
         +String "type c_pointer = C_pointer_object of int | C_pointer_null;;\n"
         +String "type c_type = C_type_int | C_type_double | C_type_pointer of c_type | C_type_struct of string;;\n"
@@ -605,6 +614,12 @@ module KERNELC-SEMANTICS
   rule valueOfType(T:Type *) => tv(T:Type *, ?_:Pointer)
   syntax String ::= getParameterNames(EvaluatedExpressions)   [function]
   rule getParameterNames(tv(_:Type, V:Value), EEs:EvaluatedExpressions)
-    => " " +String #name(V)  +String getParameterNames(EEs)
+    => " " +String #name(V) +String getParameterNames(EEs)
   rule getParameterNames(.EvaluatedExpressions) => ""
+  syntax Values ::= getArgumentValues(EvaluatedExpressions)   [function]
+  rule getArgumentValues(tv(_:Type, V:Value), EEs:EvaluatedExpressions)
+    => V, getArgumentValues(EEs)
+  rule getArgumentValues(.EvaluatedExpressions) => .Values
+
+  syntax Values ::= List{Value, ","}
 endmodule

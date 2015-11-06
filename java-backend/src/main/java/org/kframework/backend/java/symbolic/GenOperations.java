@@ -40,20 +40,20 @@ public class GenOperations {
 
     public static StringToken gen(Term state, Term expression, TermContext context) {
         try {
-            String result = "let state = !stateRef in ";
+            String result = "let stackMemory = !stackMemoryRef in ";
 
             String constraintString = "";
             for (Equality equality : constraint.equalities()) {
                 if (DataStructures.isLookup(equality.leftHandSide())) {
                     // TODO: fix order of lookups
-                    constraintString = "let " + toOCaml(equality.rightHandSide()) + " = " + toOCaml(equality.leftHandSide()) + " in " + constraintString;
+                    constraintString = "match " + toOCaml(equality.leftHandSide()) + " with " +  toOCaml(equality.rightHandSide()) + " -> " + constraintString;
                 } else {
                     constraintString = constraintString + "if " + toOCaml(equality.leftHandSide()) + " <> " + toOCaml(equality.rightHandSide()) + " then raise Side_Condition_Failure; ";
                 }
             }
             result = result + constraintString;
 
-            result = result + "stateRef := " + toOCaml(state);
+            result = result + "stackMemoryRef := " + toOCaml(state);
 
             if (!expression.equals(KSequence.EMPTY)) {
                 result = result + "; " + toOCaml(expression);
@@ -150,8 +150,10 @@ public class GenOperations {
                 throw new AssertionError();
             }
 
-            if (kLabel.label().equals("call")) {
-                return new SMTLibTerm("(" + ((UninterpretedToken) kList.get(0)).value() + " " +  ")")
+            if (kLabel.label().equals("'call")) {
+                return new SMTLibTerm("(" + ((UninterpretedToken) kList.get(0)).value() + " " + ")");
+            } else if (kLabel.label().equals("'return")) {
+                return new SMTLibTerm("(raise Return(" + ((SMTLibTerm) kList.get(0).accept(this)).expression() + "))");
             } else if (kLabel.label().equals(DataStructures.MAP_UPDATE)) {
                 return new SMTLibTerm("(" + MAP_ADD + " "
                         + ((SMTLibTerm) ((BuiltinMap) kList.get(1)).getEntries().entrySet().iterator().next().getKey().accept(this)).expression()
@@ -188,7 +190,7 @@ public class GenOperations {
                     sb.append(constructors.get(kLabel.label()));
                     if (!arguments.isEmpty()) {
                         sb.append(" (");
-                        arguments.stream().reduce(((s1, s2) -> s1 + ", " + s2));
+                        sb.append(arguments.stream().reduce(((s1, s2) -> s1 + ", " + s2)).get());
                         sb.append(")");
                     }
                     sb.append(")");
