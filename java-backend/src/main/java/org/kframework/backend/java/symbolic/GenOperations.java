@@ -5,6 +5,7 @@ import org.kframework.backend.java.builtins.IntToken;
 import org.kframework.backend.java.builtins.StringToken;
 import org.kframework.backend.java.builtins.UninterpretedToken;
 import org.kframework.backend.java.kil.BuiltinMap;
+import org.kframework.backend.java.kil.BuiltinSet;
 import org.kframework.backend.java.kil.DataStructures;
 import org.kframework.backend.java.kil.KItem;
 import org.kframework.backend.java.kil.KLabelConstant;
@@ -29,9 +30,10 @@ public class GenOperations {
 
     public static ConjunctiveFormula constraint;
     public static boolean reset;
-    private static final String MAP_EMPTY = "ImpMap.empty";
-    private static final String MAP_ADD = "ImpMap.add";
-    private static final String MAP_FIND = "ImpMap.find";
+    private static final String MAP_EMPTY = "StackMemoryMap.empty";
+    private static final String MAP_ADD = "StackMemoryMap.add";
+    private static final String MAP_REMOVE = "StackMemoryMap.remove";
+    private static final String MAP_FIND = "StackMemoryMap.find";
 
     public static Variable init(StringToken name, StringToken sort, TermContext context) {
         reset = true;
@@ -92,6 +94,7 @@ public class GenOperations {
                 .build();
         public final ImmutableMap<String, String> prefix = ImmutableMap.<String, String>builder()
                 .put("'notBool_", "not")
+                .put("'ite", "ite")
                 .put("Map:lookup", MAP_FIND)
                 .build();
         public final ImmutableMap<String, String> constructors = ImmutableMap.<String, String>builder()
@@ -159,6 +162,11 @@ public class GenOperations {
                         + ((SMTLibTerm) ((BuiltinMap) kList.get(1)).getEntries().entrySet().iterator().next().getKey().accept(this)).expression()
                         + " "
                         + ((SMTLibTerm) ((BuiltinMap) kList.get(1)).getEntries().entrySet().iterator().next().getValue().accept(this)).expression()
+                        + " "
+                        + ((SMTLibTerm) kList.get(0).accept(this)).expression() + ")");
+            } else if (kLabel.label().equals(DataStructures.MAP_REMOVE_ALL)) {
+                return new SMTLibTerm("(" + MAP_REMOVE + " "
+                        + ((SMTLibTerm) ((BuiltinSet) kList.get(1)).elements().iterator().next().accept(this)).expression()
                         + " "
                         + ((SMTLibTerm) kList.get(0).accept(this)).expression() + ")");
             } else {

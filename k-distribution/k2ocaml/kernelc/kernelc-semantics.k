@@ -324,9 +324,11 @@ module KERNELC-SEMANTICS
     tv(T:Type, V1:Value) != tv(T, V2:Value) => bool2int(V1 =/=K V2)
     [structural]
 
-  syntax KItem ::= "bool2int" "(" Bool ")"
-  rule bool2int( true) => tv(int, 1)    [structural]
-  rule bool2int(false) => tv(int, 0)    [structural]
+  syntax KItem ::= "bool2int" "(" Bool ")"    [function]
+  rule bool2int(B:Bool) => tv(int, ite(B, 1, 0))
+//  syntax KItem ::= "bool2int" "(" Bool ")"
+//  rule bool2int( true) => tv(int, 1)    [structural]
+//  rule bool2int(false) => tv(int, 0)    [structural]
 
 
   /*
@@ -587,9 +589,9 @@ module KERNELC-SEMANTICS
       .List
     =>
       ListItem(
-        "module HeapMap = Map.Make(c_pointer);;\n"
+        "module HeapMemoryMap = Map.Make(c_pointer);;\n"
         +String "module ObjectMap = Map.Make(String);;\n"
-        +String "module LocalMap = Map.Make(c_pointer);;\n"
+        +String "module StackMemoryMap = Map.Make(c_pointer);;\n"
         +String "exception Side_Condition_Failure;;\n"
         +String "type c_pointer = C_pointer_object of int | C_pointer_null;;\n"
         +String "type c_type = C_type_int | C_type_double | C_type_pointer of c_type | C_type_struct of string;;\n"
@@ -622,4 +624,6 @@ module KERNELC-SEMANTICS
   rule getArgumentValues(.EvaluatedExpressions) => .Values
 
   syntax Values ::= List{Value, ","}
+
+  syntax Int ::= ite(Bool, Int, Int)    [function]
 endmodule
