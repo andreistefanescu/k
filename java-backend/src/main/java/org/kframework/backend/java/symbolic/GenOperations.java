@@ -193,6 +193,9 @@ public class GenOperations {
                     sb.append(")");
                     return new SMTLibTerm(sb.toString());
                 } else if (constructors.containsKey(kLabel.label())) {
+                    if (constructors.get(kLabel.label()).equals("C_typed_value") && !kList.get(1).sort().equals(Sort.of("Value"))) {
+                        return new SMTLibTerm("(C_typed_value (" + arguments.get(0) + ", (C_value_" + kList.get(1).sort().toString().toLowerCase() + " " + arguments.get(1) + ")))");
+                    }
                     StringBuilder sb = new StringBuilder();
                     sb.append("(");
                     sb.append(constructors.get(kLabel.label()));

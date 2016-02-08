@@ -155,7 +155,7 @@ module KERNELC-SEMANTICS
   /*
    * Function call/return
    */
-  syntax KItem ::= callStackFrame(K, Map, List, Id)
+  //syntax KItem ::= callStackFrame(K, Map, List, Id)
   //rule
   //  <fun>...
   //    Callee |-> functionBody(PDs:ParameterDeclarations, _:Type, B:Block)
@@ -588,15 +588,16 @@ module KERNELC-SEMANTICS
     <out>...
       .List
     =>
-      ListItem(
-        "module HeapMemoryMap = Map.Make(c_pointer);;\n"
-        +String "module ObjectMap = Map.Make(String);;\n"
-        +String "module StackMemoryMap = Map.Make(c_pointer);;\n"
-        +String "exception Side_Condition_Failure;;\n"
+      ListItem(""
         +String "type c_pointer = C_pointer_object of int | C_pointer_null;;\n"
         +String "type c_type = C_type_int | C_type_double | C_type_pointer of c_type | C_type_struct of string;;\n"
         +String "type c_value = C_value_int of int | C_value_float of float | C_value_pointer of c_pointer | C_value_undef;;\n"
-        +String "type c_typed_value type = C_typed_value of c_type * c_value;;"
+        +String "type c_typed_value = C_typed_value of c_type * c_value;;\n"
+        +String "module C_pointer = struct type t = c_pointer let compare : t -> t -> int = compare end;;\n"
+        +String "module HeapMemoryMap = Map.Make(C_pointer);;\n"
+        +String "module ObjectMap = Map.Make(String);;\n"
+        +String "module StackMemoryMap = Map.Make(C_pointer);;\n"
+        +String "exception Side_Condition_Failure;;\n"
         +String ""
         +String ""
         +String ""
