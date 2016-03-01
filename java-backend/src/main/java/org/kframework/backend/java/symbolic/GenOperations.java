@@ -4,6 +4,7 @@ import org.kframework.backend.java.builtins.BoolToken;
 import org.kframework.backend.java.builtins.IntToken;
 import org.kframework.backend.java.builtins.StringToken;
 import org.kframework.backend.java.builtins.UninterpretedToken;
+import org.kframework.backend.java.kil.BuiltinList;
 import org.kframework.backend.java.kil.BuiltinMap;
 import org.kframework.backend.java.kil.BuiltinSet;
 import org.kframework.backend.java.kil.DataStructures;
@@ -19,10 +20,12 @@ import org.kframework.backend.java.kil.Token;
 import org.kframework.backend.java.kil.Variable;
 import org.kframework.kil.ASTNode;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 
 
@@ -40,7 +43,7 @@ public class GenOperations {
         return new Variable(name.stringValue(), Sort.of(sort.stringValue()));
     }
 
-    public static StringToken gen(Term state, Term expression, TermContext context) {
+    public static StringToken gen(Term heapMemory, Term stackMemory, Term output, Term expression, TermContext context) {
         try {
             String result = "let stackMemory = !stackMemoryRef in ";
 
@@ -55,7 +58,11 @@ public class GenOperations {
             }
             result = result + constraintString;
 
-            result = result + "stackMemoryRef := " + toOCaml(state);
+            result = result + "stackMemoryRef := " + toOCaml(stackMemory);
+            List<Term> formatItems = output instanceof BuiltinList ? ((BuiltinList) output).elements() : Collections.singletonList(output);
+            for (Term formatItem : formatItems) {
+                result = result + "; " + toOCaml(formatItem);
+            }
 
             if (!expression.equals(KSequence.EMPTY)) {
                 result = result + "; " + toOCaml(expression);
@@ -63,7 +70,7 @@ public class GenOperations {
 
             return StringToken.of("(" + result + ")");
         } catch (AssertionError | ClassCastException e) {
-            return StringToken.of("#error(" + state + "; " + expression + ")");
+            return StringToken.of("#error(" + stackMemory + "; " + expression + ")");
         }
     }
 
@@ -95,6 +102,8 @@ public class GenOperations {
         public final ImmutableMap<String, String> prefix = ImmutableMap.<String, String>builder()
                 .put("'notBool_", "not")
                 .put("'ite", "ite")
+                .put("'formatInt", "print_int")
+                .put("'formatString", "print_string")
                 .put("Map:lookup", MAP_FIND)
                 .build();
         public final ImmutableMap<String, String> constructors = ImmutableMap.<String, String>builder()
@@ -116,6 +125,11 @@ public class GenOperations {
         @Override
         public SMTLibTerm transform(IntToken intToken) {
             return new SMTLibTerm(intToken.bigIntegerValue().toString());
+        }
+
+        @Override
+        public SMTLibTerm transform(StringToken stringToken) {
+            return new SMTLibTerm(stringToken.value());
         }
 
         @Override
@@ -154,9 +168,13 @@ public class GenOperations {
             }
 
             if (kLabel.label().equals("'call")) {
-                return new SMTLibTerm("(" + ((UninterpretedToken) kList.get(0)).value() + " " + ")");
+                return new SMTLibTerm("(" + ((UninterpretedToken) kList.get(0)).value() + " " + flattenArgumentList((KItem) kList.get(1)).stream().map(t -> ((SMTLibTerm) t.accept(this)).expression()).collect(Collectors.joining(" ")) + ")");
             } else if (kLabel.label().equals("'return")) {
-                return new SMTLibTerm("(raise Return(" + ((SMTLibTerm) kList.get(0).accept(this)).expression() + "))");
+                if (kList.get(0).sort().equals(Sort.of("Value"))) {
+                    return new SMTLibTerm("(raise (Return " + ((SMTLibTerm) kList.get(0).accept(this)).expression() + "))");
+                } else {
+                    return new SMTLibTerm("(raise (Return " + "(C_value_" + kList.get(0).sort().toString().toLowerCase() + " " + ((SMTLibTerm) kList.get(0).accept(this)).expression() + ")))");
+                }
             } else if (kLabel.label().equals(DataStructures.MAP_UPDATE)) {
                 return new SMTLibTerm("(" + MAP_ADD + " "
                         + ((SMTLibTerm) ((BuiltinMap) kList.get(1)).getEntries().entrySet().iterator().next().getKey().accept(this)).expression()
@@ -210,6 +228,19 @@ public class GenOperations {
                     throw new AssertionError();
                 }
 
+            }
+        }
+
+        private List<Term> flattenArgumentList(KItem kItem) {
+            if (kItem.klabel().name().equals("'_,_")) {
+                return ImmutableList.<Term>builder()
+                        .add((Term) kItem.klist().items().get(0))
+                        .addAll(flattenArgumentList((KItem) kItem.klist().items().get(1)))
+                        .build();
+            } else if (kItem.klabel().name().equals("'.List{\"'_,_\"}")) {
+                return ImmutableList.of();
+            } else {
+                throw new AssertionError();
             }
         }
 

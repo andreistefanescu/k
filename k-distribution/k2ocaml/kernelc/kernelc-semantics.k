@@ -465,9 +465,10 @@ module KERNELC-SEMANTICS
                  | "beginBasicBlock"
                  | "endBasicBlock"
   syntax KItem ::= addCode(String)
-  syntax KItem ::= "#initialize" "(" String "," String ")"    [function, impure, hook(Gen.init)]
-  syntax String ::= "#generate" "(" Map "," K ")"             [function, impure, hook(Gen.gen)]
-                  | "#name" "(" K ")"                         [function, impure, hook(Gen.name)]
+                 | addString(String)
+  syntax KItem ::= "#initialize" "(" String "," String ")"            [function, impure, hook(Gen.init)]
+  syntax String ::= "#generate" "(" Map "," Map "," List "," K ")"    [function, impure, hook(Gen.gen)]
+                  | "#name" "(" K ")"                                 [function, impure, hook(Gen.name)]
 
   rule extendedBlock(K)
     => beginExtendedBlock
@@ -489,14 +490,18 @@ module KERNELC-SEMANTICS
     <k> beginBasicBlock => .K ...</k>
     <heapMemory> _:Map => #initialize("heapMemory", "Map") </heapMemory>
     <stackMemory> _:Map => #initialize("stackMemory", "Map") </stackMemory>
+    <out> _:List => .List </out>
   rule
-    <k> endBasicBlock => addCode(#generate(M2, .K))  ...</k>
+    <k> endBasicBlock => addCode(#generate(M1, M2, L, .K))  ...</k>
     <heapMemory> M1:Map </heapMemory>
     <stackMemory> M2:Map </stackMemory>
+    <out> L:List => .List </out>
   rule
-    <k> TV:TypedValue ~> endBasicBlock => addCode(#generate(M2, TV)) ...</k>
+    <k> K:KItem ~> endBasicBlock => addCode(#generate(M1, M2, L, K)) ...</k>
     <heapMemory> M1:Map </heapMemory>
     <stackMemory> M2:Map </stackMemory>
+    <out> L:List => .List </out>
+    when isTypedValue(K) orBool isBool(K)
 
   rule
     <k> addCode(C2:String) => .K ...</k>
@@ -510,19 +515,19 @@ module KERNELC-SEMANTICS
   syntax KResult ::= String
   syntax Expression ::= String
   syntax Statement ::= String
-  rule if(E, S1, S2) => extendedBlock(E) ~> if(HOLE, S1, S2)            [heat]
+  rule if(E, S1, S2) => extendedBlock(expression2bool(E)) ~> if(HOLE, S1, S2)            [heat]
   rule K:KResult ~> if(HOLE, S1, S2) => if(K, S1, S2)                   [cool]
   rule if(E, S1, S2) => extendedBlock(S1) ~> if(E, HOLE, S2)            [heat]
   rule K:KResult ~> if(E, HOLE, S2)  => if(E, K, S2)                    [cool]
   rule if(E, S1, S2) => extendedBlock(S2) ~> if(E, S1, HOLE)            [heat]
   rule K:KResult ~> if(E, S1, HOLE)  => if(E, S1, K)                    [cool]
-  rule choice(E1, E2, E3) => extendedBlock(E1) ~> choice(HOLE, E2, E3)  [heat]
+  rule choice(E1, E2, E3) => extendedBlock(expression2bool(E1)) ~> choice(HOLE, E2, E3)  [heat]
   rule K:KResult ~> choice(HOLE, E1, E2) => choice(K, E1, E2)           [cool]
   rule choice(E1, E2, E3) => extendedBlock(E2) ~> choice(E1, HOLE, E3)  [heat]
   rule K:KResult ~> choice(E1, HOLE, E2) => choice(E1, K, E2)           [cool]
   rule choice(E1, E2, E3) => extendedBlock(E3) ~> choice(E1, E2, HOLE)  [heat]
   rule K:KResult ~> choice(E1, E2, HOLE) => choice(E1, E2, K)           [cool]
-  rule while(E, S) => extendedBlock(E) ~> while(HOLE, S)                [heat]
+  rule while(E, S) => extendedBlock(expression2bool(E)) ~> while(HOLE, S)                [heat]
   rule K:KResult ~> while(HOLE, S) => while(K, S)                       [cool]
   rule while(E, S) => extendedBlock(S) ~> while(E, HOLE)                [heat]
   rule K:KResult ~> while(E, HOLE) => while(E, K)                       [cool]
@@ -545,9 +550,6 @@ module KERNELC-SEMANTICS
   rule
     <k> F:Id(EEs:EvaluatedExpressions) => tv(T, call(F, getArgumentValues(EEs))) ...</k>
     <fun>... F |-> functionBody(_:ParameterDeclarations, T:Type, _:Block) ...</fun>
-  //rule malloc(EEs:EvaluatedExpressions) => tv(void *, call(F, EEs))
-  rule F:Id(EEs:EvaluatedExpressions) => tv(void, call(F, getArgumentValues(EEs)))
-    requires F ==K free orBool F ==K scanf orBool F ==K printf
   rule
     <k>
       return tv(T:Type, V:Value);
@@ -557,6 +559,18 @@ module KERNELC-SEMANTICS
     <env> Env:Map </env>
     <fun>... F |-> functionBody(_:ParameterDeclarations, T:Type, _:Block) ...</fun>
     <fun-id> F:Id </fun-id>
+
+  syntax KItem ::= formatInt(String, Value)
+                 | formatString(String)
+  rule
+    <k> printf(S:String, tv(int, V:Value)) => tv(void, undef) ...</k>
+    <out>... .List => ListItem(formatInt(S, V)) </out>
+  rule
+    <k> printf(S:String) => tv(void, undef) ...</k>
+    <out>... .List => ListItem(formatString(S)) </out>
+  //rule malloc(EEs:EvaluatedExpressions) => tv(void *, call(F, EEs))
+  //rule F:Id(EEs:EvaluatedExpressions) => tv(void, call(F, getArgumentValues(EEs)))
+  //  requires F ==K free orBool F ==K scanf
 
   syntax KItem ::= "generate1"
                  | generate2(Set)
@@ -573,19 +587,24 @@ module KERNELC-SEMANTICS
     <k>
       generate4(F:Id, EEs:EvaluatedExpressions)
     =>
-      addCode("let rec " +String Id2String(F) +String getParameterNames(EEs) +String " =\n ")
+      addString("let rec " +String Id2String(F) +String getParameterNames(EEs) +String " =\ntry\n")
       ~> extendedBlock({ declareParameters(PDs) bindParameters(PDs, EEs, B) })
+      //~> addString("\nwith Return return_value -> return_value\n;;\n")
     ...</k>
     <fun>... F |-> functionBody(PDs:ParameterDeclarations, _:Type, B:Block) ...</fun>
     <fun-id> _ => F </fun-id>
 
   rule
+    <k> addString(C2:String) => .K ...</k>
+    <code> C1:String => C1 +String C2 </code>
+
+  rule
     <k> (C2:String => .K) ~> generate2(_:Set) </k>
-    <code> C1:String => C1 +String C2 +String "\n;;\n" </code>
+    <code> C1:String => C1 +String C2 +String ";\n(C_value_int 0)\nwith Return return_value -> return_value\n;;\n" </code>
   rule
     <k> generate2(.Set) => .K </k>
     <code> C:String </code>
-    <out>...
+    <stdout>...
       .List
     =>
       ListItem(""
@@ -598,14 +617,15 @@ module KERNELC-SEMANTICS
         +String "module ObjectMap = Map.Make(String);;\n"
         +String "module StackMemoryMap = Map.Make(C_pointer);;\n"
         +String "exception Side_Condition_Failure;;\n"
+        +String "exception Return of c_value;;\n"
+        +String "let ite x y z = if x then y else z;;\n"
+        +String "let print_int s v = match v with (C_value_int n) -> Printf.printf s n;;"
         +String ""
-        +String ""
-        +String ""
-        +String ""
-        +String "let stateRef = ref ImpMap.empty;;\n"
-        +String C +String ";;\n"
-        +String "ImpMap.iter (fun key value ->  print_string(key ^ \" \" ^ (string_of_int value)^ \"\\n\")) !stateRef;;\n")
-    </out>
+        +String "let stackMemoryRef = ref StackMemoryMap.empty;;\n"
+        +String "let heapMemoryRef = ref HeapMemoryMap.empty;;\n"
+        +String C +String "\n"
+        +String "match main with (C_value_int n) -> n;;\n")
+    </stdout>
 
   syntax EvaluatedExpressions ::= makeTypedArguments(ParameterDeclarations)    [function]
   rule makeTypedArguments(T:Type _:Id, PDs:ParameterDeclarations)

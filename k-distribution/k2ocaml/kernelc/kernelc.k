@@ -33,12 +33,12 @@ module KERNELC
       <heapMemory> .Map </heapMemory>
       <stackMemory> .Map </stackMemory>
 
-      //<in stream="stdin"> .List </in>
-      //<out stream="stdout"> .List </out>
+      <in> .List </in>
+      <out> .List </out>
 
       <code> "" </code>
       <codeStack> .List </codeStack>
-      <out stream="stdout"> .List </out>
+      <stdout stream="stdout"> .List </stdout>
     </config>
 
   /*
