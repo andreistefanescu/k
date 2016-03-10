@@ -213,7 +213,7 @@ public class ConstrainedTerm extends JavaSymbolicObject {
             variables = variables == null ? constrainedTerm.variableSet() : variables;
             candidate = candidate.orientSubstitution(variables);
 
-            ConjunctiveFormula solution = candidate.addAndSimplify(constraint());
+            ConjunctiveFormula solution = constraint().addAndSimplify(candidate);
             if (solution.isFalse()) {
                 continue;
             }

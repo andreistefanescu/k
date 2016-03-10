@@ -1,5 +1,6 @@
 package org.kframework.backend.java.symbolic;
 
+import com.google.common.collect.Sets;
 import org.kframework.backend.java.builtins.BoolToken;
 import org.kframework.backend.java.builtins.IntToken;
 import org.kframework.backend.java.builtins.StringToken;
@@ -21,8 +22,10 @@ import org.kframework.backend.java.kil.Variable;
 import org.kframework.kil.ASTNode;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import com.google.common.collect.ImmutableList;
@@ -33,10 +36,16 @@ public class GenOperations {
 
     public static ConjunctiveFormula constraint;
     public static boolean reset;
-    private static final String MAP_EMPTY = "StackMemoryMap.empty";
-    private static final String MAP_ADD = "StackMemoryMap.add";
-    private static final String MAP_REMOVE = "StackMemoryMap.remove";
-    private static final String MAP_FIND = "StackMemoryMap.find";
+    private static final String MEMORY_MAP_EMPTY = "MemoryMap.empty";
+    private static final String MEMORY_MAP_ADD = "MemoryMap.add";
+    private static final String MEMORY_MAP_REMOVE = "MemoryMap.remove";
+    private static final String MEMORY_MAP_FIND = "MemoryMap.find";
+    private static final String MEMORY_MAP_SIZE = "MemoryMap.cardinal";
+    private static final String OBJECT_MAP_EMPTY = "ObjectMap.empty";
+    private static final String OBJECT_MAP_ADD = "ObjectMap.add";
+    private static final String OBJECT_MAP_REMOVE = "ObjectMap.remove";
+    private static final String OBJECT_MAP_FIND = "ObjectMap.find";
+    private static final String OBJECT_MAP_SIZE = "ObjectMap.cardinal";
 
     public static Variable init(StringToken name, StringToken sort, TermContext context) {
         reset = true;
@@ -45,27 +54,29 @@ public class GenOperations {
 
     public static StringToken gen(Term heapMemory, Term stackMemory, Term output, Term expression, TermContext context) {
         try {
-            String result = "let stackMemory = !stackMemoryRef in ";
+            String result = "let stackMemory = !stackMemoryRef in let heapMemory = !heapMemoryRef in ";
 
             String constraintString = "";
             for (Equality equality : constraint.equalities()) {
                 if (DataStructures.isLookup(equality.leftHandSide())) {
                     // TODO: fix order of lookups
-                    constraintString = "match " + toOCaml(equality.leftHandSide()) + " with " +  toOCaml(equality.rightHandSide()) + " -> " + constraintString;
+                    constraintString += "match " + toOCaml(equality.leftHandSide()) + " with " +  toOCaml(equality.rightHandSide()) + " -> ";
                 } else {
-                    constraintString = constraintString + "if " + toOCaml(equality.leftHandSide()) + " <> " + toOCaml(equality.rightHandSide()) + " then raise Side_Condition_Failure; ";
+                    constraintString += "if " + toOCaml(equality.leftHandSide()) + " <> " + toOCaml(equality.rightHandSide()) + " then raise Side_Condition_Failure; ";
                 }
             }
-            result = result + constraintString;
+            result += constraintString;
 
-            result = result + "stackMemoryRef := " + toOCaml(stackMemory);
+            result += "stackMemoryRef := " + toOCaml(stackMemory) + "; ";
+            result += "heapMemoryRef := " + toOCaml(heapMemory);
+
             List<Term> formatItems = output instanceof BuiltinList ? ((BuiltinList) output).elements() : Collections.singletonList(output);
             for (Term formatItem : formatItems) {
-                result = result + "; " + toOCaml(formatItem);
+                result += "; " + toOCaml(formatItem);
             }
 
             if (!expression.equals(KSequence.EMPTY)) {
-                result = result + "; " + toOCaml(expression);
+                result += "; " + toOCaml(expression);
             }
 
             return StringToken.of("(" + result + ")");
@@ -104,7 +115,7 @@ public class GenOperations {
                 .put("'ite", "ite")
                 .put("'formatInt", "print_int")
                 .put("'formatString", "print_string")
-                .put("Map:lookup", MAP_FIND)
+                .put("'sizeMap", MEMORY_MAP_SIZE)
                 .build();
         public final ImmutableMap<String, String> constructors = ImmutableMap.<String, String>builder()
                 .put("'object(_)", "C_pointer_object")
@@ -175,15 +186,20 @@ public class GenOperations {
                 } else {
                     return new SMTLibTerm("(raise (Return " + "(C_value_" + kList.get(0).sort().toString().toLowerCase() + " " + ((SMTLibTerm) kList.get(0).accept(this)).expression() + ")))");
                 }
+            } else if (kLabel.label().equals(DataStructures.MAP_LOOKUP)) {
+                return new SMTLibTerm("(" + (kList.get(1).sort().name().equals("Pointer") ? MEMORY_MAP_FIND : OBJECT_MAP_FIND) + " "
+                        + ((SMTLibTerm) kList.get(1).accept(this)).expression()
+                        + " "
+                        + ((SMTLibTerm) kList.get(0).accept(this)).expression() + ")");
             } else if (kLabel.label().equals(DataStructures.MAP_UPDATE)) {
-                return new SMTLibTerm("(" + MAP_ADD + " "
+                return new SMTLibTerm("(" + (((BuiltinMap) kList.get(1)).getEntries().entrySet().iterator().next().getKey().sort().name().equals("Pointer") ? MEMORY_MAP_ADD : OBJECT_MAP_ADD) + " "
                         + ((SMTLibTerm) ((BuiltinMap) kList.get(1)).getEntries().entrySet().iterator().next().getKey().accept(this)).expression()
                         + " "
                         + ((SMTLibTerm) ((BuiltinMap) kList.get(1)).getEntries().entrySet().iterator().next().getValue().accept(this)).expression()
                         + " "
                         + ((SMTLibTerm) kList.get(0).accept(this)).expression() + ")");
             } else if (kLabel.label().equals(DataStructures.MAP_REMOVE_ALL)) {
-                return new SMTLibTerm("(" + MAP_REMOVE + " "
+                return new SMTLibTerm("(" + (((BuiltinSet) kList.get(1)).elements().iterator().next().sort().name().equals("Pointer") ? MEMORY_MAP_REMOVE : OBJECT_MAP_REMOVE) + " "
                         + ((SMTLibTerm) ((BuiltinSet) kList.get(1)).elements().iterator().next().accept(this)).expression()
                         + " "
                         + ((SMTLibTerm) kList.get(0).accept(this)).expression() + ")");
@@ -196,14 +212,6 @@ public class GenOperations {
                     assert arguments.size() == 2;
                     return new SMTLibTerm("(" + arguments.get(0) + " " + infix.get(kLabel.label()) + " " + arguments.get(1) + ")");
                 } else if (prefix.containsKey(kLabel.label())) {
-                    if (kLabel.label().equals(DataStructures.MAP_LOOKUP)) {
-                        if (arguments.size() != 2) {
-                            throw new UnsupportedOperationException();
-                        }
-                        String temp = arguments.get(0);
-                        arguments.set(0, arguments.get(1));
-                        arguments.set(1, temp);
-                    }
                     StringBuilder sb = new StringBuilder();
                     sb.append("(");
                     sb.append(prefix.get(kLabel.label()));
@@ -246,13 +254,12 @@ public class GenOperations {
 
         @Override
         public SMTLibTerm transform(BuiltinMap builtinMap) {
-            if (!builtinMap.isConcreteCollection() && !builtinMap.hasFrame()) {
-                throw new AssertionError();
-            }
+            assert builtinMap.isConcreteCollection() || builtinMap.hasFrame() && builtinMap.baseTerms().size() == 1;
+            assert !builtinMap.isEmpty();
 
-            String result = builtinMap.hasFrame() ? transform(builtinMap.frame()).expression() : MAP_EMPTY;
+            String result = builtinMap.hasFrame() ? transform(builtinMap.frame()).expression() : MEMORY_MAP_EMPTY;
             for (Map.Entry<Term, Term> entry : builtinMap.getEntries().entrySet()) {
-                result = "(" + MAP_ADD + " "
+                result = "(" + MEMORY_MAP_ADD + " "
                         + ((SMTLibTerm) entry.getKey().accept(this)).expression()
                         + " "
                         + ((SMTLibTerm) entry.getValue().accept(this)).expression()

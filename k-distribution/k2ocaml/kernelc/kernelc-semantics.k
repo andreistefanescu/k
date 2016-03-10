@@ -362,6 +362,7 @@ module KERNELC-SEMANTICS
     ...</fun>
     <k> return tv((T1:Type * => T2 *), null); ...</k>
     <fun-id> Callee:Id </fun-id>
+    requires T1 =/=K T2
     [structural]
 
 
@@ -382,25 +383,25 @@ module KERNELC-SEMANTICS
    */
   /* malloc only allocates one structure */
   // TODO: check why the HOLE below does not become a freezer
-  rule
-    <k>
-      malloc(tv(int, Size:Int)) ~> (struct S:Id *) HOLE:>Expression
-    =>
-      tv(struct S *, object(!I:Int))
-    ...</k>
-    <heapMemory>... .Map => object(!I) |-> initializeObject(Members) ...</heapMemory>
-    <struct>... S |-> Members:Map ...</struct>
-    when Size ==K size(Members)
-    [structural]
+//  rule
+//    <k>
+//      malloc(tv(int, Size:Int)) ~> (struct S:Id *) HOLE:>Expression
+//    =>
+//      tv(struct S *, object(!I:Int))
+//    ...</k>
+//    <heapMemory>... .Map => object(!I) |-> initializeObject(Members) ...</heapMemory>
+//    <struct>... S |-> Members:Map ...</struct>
+//    when Size ==K size(Members)
+//    [structural]
   syntax TypedValue ::= makeNewObject(Int)
   rule malloc(tv(int, Size:Int)) => makeNewObject(Size)
   rule
     <k>
       (struct S:Id *) makeNewObject(Size)
     =>
-      tv(struct S *, object(!I:Int))
+      tv(struct S *, object(size(M)))
     ...</k>
-    <heapMemory>... .Map => object(!I) |-> initializeObject(Members) ...</heapMemory>
+    <heapMemory> (.Map => object(size(M)) |-> initializeObject(Members)) M:Map </heapMemory>
     <struct>... S |-> Members:Map ...</struct>
     when Size ==K size(Members)
     [structural]
@@ -506,7 +507,7 @@ module KERNELC-SEMANTICS
   rule
     <k> addCode(C2:String) => .K ...</k>
     <code>
-      C1:String => #if C1 =/=K "" #then C1 +String "; " +String C2 #else C2 #fi
+      C1:String => #if C1 =/=K "" #then C1 +String ";\n" +String C2 #else C2 #fi
     </code>
 
   syntax KItem ::= if(Expression, Statement, Statement)
@@ -537,11 +538,11 @@ module KERNELC-SEMANTICS
   rule while (E) S       => endBasicBlock ~> while(E, S)        ~> beginBasicBlock
 
   rule if(E:String, S1:String, S2:String)
-    => addCode("(if " +String E +String " then " +String S1 +String " else " +String S2 +String ")")
+    => addCode("(if (" +String E +String ") then (" +String S1 +String ") else (" +String S2 +String "))")
   rule choice(E1:String, E2:String, E3:String)
-    => addCode("(if " +String E1 +String " then " +String E2 +String " else " +String E3 +String ")")
+    => addCode("(if (" +String E1 +String ") then (" +String E2 +String ") else (" +String E3 +String "))")
   rule while(E:String, S:String)
-    => addCode("while " +String E +String " do " +String S +String "done")
+    => addCode("while (" +String E +String ") do (" +String S +String ") done")
 
   rule _:TypedValue; => endBasicBlock ~> beginBasicBlock    [structural]
 
@@ -568,9 +569,6 @@ module KERNELC-SEMANTICS
   rule
     <k> printf(S:String) => tv(void, undef) ...</k>
     <out>... .List => ListItem(formatString(S)) </out>
-  //rule malloc(EEs:EvaluatedExpressions) => tv(void *, call(F, EEs))
-  //rule F:Id(EEs:EvaluatedExpressions) => tv(void, call(F, getArgumentValues(EEs)))
-  //  requires F ==K free orBool F ==K scanf
 
   syntax KItem ::= "generate1"
                  | generate2(Set)
@@ -613,16 +611,15 @@ module KERNELC-SEMANTICS
         +String "type c_value = C_value_int of int | C_value_float of float | C_value_pointer of c_pointer | C_value_undef;;\n"
         +String "type c_typed_value = C_typed_value of c_type * c_value;;\n"
         +String "module C_pointer = struct type t = c_pointer let compare : t -> t -> int = compare end;;\n"
-        +String "module HeapMemoryMap = Map.Make(C_pointer);;\n"
+        +String "module MemoryMap = Map.Make(C_pointer);;\n"
         +String "module ObjectMap = Map.Make(String);;\n"
-        +String "module StackMemoryMap = Map.Make(C_pointer);;\n"
         +String "exception Side_Condition_Failure;;\n"
         +String "exception Return of c_value;;\n"
         +String "let ite x y z = if x then y else z;;\n"
-        +String "let print_int s v = match v with (C_value_int n) -> Printf.printf s n;;"
+        +String "let print_int s v = match v with (C_value_int n) -> Printf.printf s n;;\n"
         +String ""
-        +String "let stackMemoryRef = ref StackMemoryMap.empty;;\n"
-        +String "let heapMemoryRef = ref HeapMemoryMap.empty;;\n"
+        +String "let stackMemoryRef = ref MemoryMap.empty;;\n"
+        +String "let heapMemoryRef = ref MemoryMap.empty;;\n"
         +String C +String "\n"
         +String "match main with (C_value_int n) -> n;;\n")
     </stdout>
