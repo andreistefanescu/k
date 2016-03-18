@@ -231,7 +231,7 @@ public class Equality implements Serializable {
                 // syntax ThreadId ::= Int | "foo" | "getThreadId" [function]
                 // ThreadId:Int ?= getThreadId
                 if (leftHandSide instanceof Variable && rightHandSide instanceof KItem
-                        && !((KItem)rightHandSide).isEvaluable(equality.context)) {
+                        && !rightHandSide.isSymbolic()) {
                     for (Sort sort : ((KItem) rightHandSide).possibleSorts()) {
                         unifiable = unifiable || definition.subsorts().isSubsortedEq(leftHandSide.sort(), sort);
                     }
@@ -239,7 +239,7 @@ public class Equality implements Serializable {
                         return true;
                     }
                 } else if (rightHandSide instanceof Variable && leftHandSide instanceof KItem
-                        && !((KItem)leftHandSide).isEvaluable(equality.context)) {
+                        && !leftHandSide.isSymbolic()) {
                     for (Sort sort : ((KItem) leftHandSide).possibleSorts()) {
                         unifiable = unifiable || definition.subsorts().isSubsortedEq(rightHandSide.sort(), sort);
                     }

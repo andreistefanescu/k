@@ -399,9 +399,9 @@ module KERNELC-SEMANTICS
     <k>
       (struct S:Id *) makeNewObject(Size)
     =>
-      tv(struct S *, object(size(M)))
+      tv(struct S *, object(!I:Int))
     ...</k>
-    <heapMemory> (.Map => object(size(M)) |-> initializeObject(Members)) M:Map </heapMemory>
+    <heapMemory>... .Map => object(!I) |-> initializeObject(Members) ...</heapMemory>
     <struct>... S |-> Members:Map ...</struct>
     when Size ==K size(Members)
     [structural]
@@ -469,7 +469,11 @@ module KERNELC-SEMANTICS
                  | addString(String)
   syntax KItem ::= "#initialize" "(" String "," String ")"            [function, impure, hook(Gen.init)]
   syntax String ::= "#generate" "(" Map "," Map "," List "," K ")"    [function, impure, hook(Gen.gen)]
-                  | "#name" "(" K ")"                                 [function, impure, hook(Gen.name)]
+                  | "#term" "(" K ")"                                 [function, impure, hook(Gen.term)]
+
+  rule
+    <k> addString(C2:String) => .K ...</k>
+    <code> C1:String => C1 +String C2 </code>
 
   rule extendedBlock(K)
     => beginExtendedBlock
@@ -546,11 +550,12 @@ module KERNELC-SEMANTICS
 
   rule _:TypedValue; => endBasicBlock ~> beginBasicBlock    [structural]
 
-  syntax Value ::= call(Id, Values)
+  syntax KItem ::= call(Id, EvaluatedExpressions)   [function]
   syntax TypedValue ::= return(Value)
   rule
-    <k> F:Id(EEs:EvaluatedExpressions) => tv(T, call(F, getArgumentValues(EEs))) ...</k>
+    <k> F:Id(EEs:EvaluatedExpressions) => tv(T, ?V:Value) ...</k>
     <fun>... F |-> functionBody(_:ParameterDeclarations, T:Type, _:Block) ...</fun>
+    ensures ?V ==K call(F, EEs)
   rule
     <k>
       return tv(T:Type, V:Value);
@@ -577,7 +582,10 @@ module KERNELC-SEMANTICS
   rule
     <k> generate1 => generate2(keys(Funs)) </k>
     <fun> Funs:Map </fun>
-  rule (.K => generate3(F)) ~> generate2((SetItem(F:Id) => .Set) S:Set)
+  rule
+    <k> (.K => generate3(F)) ~> generate2((SetItem(F:Id) => .Set) S:Set) ...</k>
+    <code> C:String => C +String  #if C ==K "" #then "let rec " #else "\nand " #fi </code>
+
   rule
     <k> generate3(F:Id) => generate4(F, makeTypedArguments(PDs)) ...</k>
     <fun>... F |-> functionBody(PDs:ParameterDeclarations, _:Type, _:Block) ...</fun>
@@ -585,20 +593,15 @@ module KERNELC-SEMANTICS
     <k>
       generate4(F:Id, EEs:EvaluatedExpressions)
     =>
-      addString("let rec " +String Id2String(F) +String getParameterNames(EEs) +String " =\ntry\n")
-      ~> extendedBlock({ declareParameters(PDs) bindParameters(PDs, EEs, B) })
-      //~> addString("\nwith Return return_value -> return_value\n;;\n")
+      extendedBlock({ declareParameters(PDs) bindParameters(PDs, EEs, B) })
     ...</k>
     <fun>... F |-> functionBody(PDs:ParameterDeclarations, _:Type, B:Block) ...</fun>
     <fun-id> _ => F </fun-id>
-
-  rule
-    <k> addString(C2:String) => .K ...</k>
-    <code> C1:String => C1 +String C2 </code>
-
+    <code> C:String => C +String Id2String(F) +String Arguments2String(EEs) +String " =\ntry\n" </code>
   rule
     <k> (C2:String => .K) ~> generate2(_:Set) </k>
-    <code> C1:String => C1 +String C2 +String ";\n(C_value_int 0)\nwith Return return_value -> return_value\n;;\n" </code>
+    <code> C1:String => C1 +String C2 +String ";\n(C_value_int 0)\nwith Return return_value -> return_value" </code>
+
   rule
     <k> generate2(.Set) => .K </k>
     <code> C:String </code>
@@ -616,11 +619,12 @@ module KERNELC-SEMANTICS
         +String "exception Side_Condition_Failure;;\n"
         +String "exception Return of c_value;;\n"
         +String "let ite x y z = if x then y else z;;\n"
+        +String "let counter = ref 0;;\n"
+        +String "let fresh x = counter := !counter + 1; !counter;;\n"
         +String "let print_int s v = match v with (C_value_int n) -> Printf.printf s n;;\n"
-        +String ""
         +String "let stackMemoryRef = ref MemoryMap.empty;;\n"
         +String "let heapMemoryRef = ref MemoryMap.empty;;\n"
-        +String C +String "\n"
+        +String C +String "\n;;\n"
         +String "match main with (C_value_int n) -> n;;\n")
     </stdout>
 
@@ -629,17 +633,13 @@ module KERNELC-SEMANTICS
     =>  valueOfType(T), makeTypedArguments(PDs)
   rule makeTypedArguments(.ParameterDeclarations) => .EvaluatedExpressions
   syntax TypedValue ::= valueOfType(Type)   [function]
-  rule valueOfType(int) => tv(int, ?_:Int)
-  rule valueOfType(double) => tv(double, ?_:Float)
-  rule valueOfType(T:Type *) => tv(T:Type *, ?_:Pointer)
-  syntax String ::= getParameterNames(EvaluatedExpressions)   [function]
-  rule getParameterNames(tv(_:Type, V:Value), EEs:EvaluatedExpressions)
-    => " " +String #name(V) +String getParameterNames(EEs)
-  rule getParameterNames(.EvaluatedExpressions) => ""
-  syntax Values ::= getArgumentValues(EvaluatedExpressions)   [function]
-  rule getArgumentValues(tv(_:Type, V:Value), EEs:EvaluatedExpressions)
-    => V, getArgumentValues(EEs)
-  rule getArgumentValues(.EvaluatedExpressions) => .Values
+  rule valueOfType(int) => tv(int, ?_:Value)
+  rule valueOfType(double) => tv(double, ?_:Value)
+  rule valueOfType(T:Type *) => tv(T:Type *, ?_:Value)
+  syntax String ::= Arguments2String(EvaluatedExpressions)  [function]
+  rule Arguments2String(TV:TypedValue, EEs:EvaluatedExpressions)
+    => " " +String #term(TV) +String Arguments2String(EEs)
+  rule Arguments2String(.EvaluatedExpressions) => ""
 
   syntax Values ::= List{Value, ","}
 

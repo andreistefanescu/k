@@ -67,7 +67,8 @@ module INT-HOOKS
   rule isNat(I:Int) => I >=Int 0 [function, anywhere]
 
   syntax Int ::= freshInt(Int)    [freshGenerator, function]
-  rule freshInt(I:Int) => I
+  rule freshInt(I:Int) => fresh(I)
+  syntax KItem ::= fresh(Int)     [function]
 
   syntax Int ::= "randomRandom" "(" Int ")" [function, klabel(randomRandom), hook(INT.random)]
 endmodule

@@ -54,13 +54,18 @@ public class GenOperations {
 
     public static StringToken gen(Term heapMemory, Term stackMemory, Term output, Term expression, TermContext context) {
         try {
-            String result = "let stackMemory = !stackMemoryRef in let heapMemory = !heapMemoryRef in ";
+            String result = "";
 
             String constraintString = "";
+            Set<Variable> variables = Sets.newHashSet();
             for (Equality equality : constraint.equalities()) {
                 if (DataStructures.isLookup(equality.leftHandSide())) {
                     // TODO: fix order of lookups
-                    constraintString += "match " + toOCaml(equality.leftHandSide()) + " with " +  toOCaml(equality.rightHandSide()) + " -> ";
+                    constraintString += "match " + toOCaml(equality.leftHandSide()) + " with " + toOCaml(equality.rightHandSide()) + " -> ";
+                } else if (equality.leftHandSide() instanceof Variable
+                        && !equality.rightHandSide().variableSet().contains((Variable) equality.leftHandSide())
+                        && !variables.contains((Variable) equality.leftHandSide())) {
+                    constraintString += "let " + toOCaml(equality.leftHandSide()) + " = " + toOCaml(equality.rightHandSide()) + " in ";
                 } else {
                     constraintString += "if " + toOCaml(equality.leftHandSide()) + " <> " + toOCaml(equality.rightHandSide()) + " then raise Side_Condition_Failure; ";
                 }
@@ -79,14 +84,14 @@ public class GenOperations {
                 result += "; " + toOCaml(expression);
             }
 
-            return StringToken.of("(" + result + ")");
+            return StringToken.of(result);
         } catch (AssertionError | ClassCastException e) {
             return StringToken.of("#error(" + stackMemory + "; " + expression + ")");
         }
     }
 
-    public static StringToken name(Variable variable, TermContext context) {
-        return StringToken.of(variable.name());
+    public static StringToken term(Term term, TermContext context) {
+        return StringToken.of(toOCaml(term));
     }
 
     private static String toOCaml(Term term) {
@@ -113,9 +118,10 @@ public class GenOperations {
         public final ImmutableMap<String, String> prefix = ImmutableMap.<String, String>builder()
                 .put("'notBool_", "not")
                 .put("'ite", "ite")
+                .put("'fresh", "fresh")
                 .put("'formatInt", "print_int")
                 .put("'formatString", "print_string")
-                .put("'sizeMap", MEMORY_MAP_SIZE)
+                .put("'sizeMap", OBJECT_MAP_SIZE)
                 .build();
         public final ImmutableMap<String, String> constructors = ImmutableMap.<String, String>builder()
                 .put("'object(_)", "C_pointer_object")
@@ -159,7 +165,14 @@ public class GenOperations {
 
         @Override
         public SMTLibTerm transform(Variable variable) {
-            return new SMTLibTerm(variable.name());
+            switch (variable.name()) {
+            case "stackMemory":
+            case "heapMemory":
+                return new SMTLibTerm("!" + variable.name() + "Ref");
+            default:
+                return new SMTLibTerm(variable.name());
+            }
+
         }
 
         @Override
@@ -257,9 +270,21 @@ public class GenOperations {
             assert builtinMap.isConcreteCollection() || builtinMap.hasFrame() && builtinMap.baseTerms().size() == 1;
             assert !builtinMap.isEmpty();
 
-            String result = builtinMap.hasFrame() ? transform(builtinMap.frame()).expression() : MEMORY_MAP_EMPTY;
+            String empty = null;
+            String add = null;
+            if (!builtinMap.getEntries().isEmpty()) {
+                if (builtinMap.getEntries().keySet().iterator().next().sort().name().equals("Pointer")) {
+                    empty = MEMORY_MAP_EMPTY;
+                    add = MEMORY_MAP_ADD;
+                } else {
+                    empty = OBJECT_MAP_EMPTY;
+                    add = OBJECT_MAP_ADD;
+                }
+            }
+
+            String result = builtinMap.hasFrame() ? transform(builtinMap.frame()).expression() : empty;
             for (Map.Entry<Term, Term> entry : builtinMap.getEntries().entrySet()) {
-                result = "(" + MEMORY_MAP_ADD + " "
+                result = "(" + add + " "
                         + ((SMTLibTerm) entry.getKey().accept(this)).expression()
                         + " "
                         + ((SMTLibTerm) entry.getValue().accept(this)).expression()
