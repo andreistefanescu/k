@@ -597,7 +597,7 @@ module KERNELC-SEMANTICS
     ...</k>
     <fun>... F |-> functionBody(PDs:ParameterDeclarations, _:Type, B:Block) ...</fun>
     <fun-id> _ => F </fun-id>
-    <code> C:String => C +String Id2String(F) +String Arguments2String(EEs) +String " =\ntry\n" </code>
+    <code> C:String => C +String Id2String(F) +String #if Arguments2String(EEs) =/=K "" #then Arguments2String(EEs) #else "()" #fi +String " =\ntry\n" </code>
   rule
     <k> (C2:String => .K) ~> generate2(_:Set) </k>
     <code> C1:String => C1 +String C2 +String ";\n(C_value_int 0)\nwith Return return_value -> return_value" </code>
@@ -610,7 +610,7 @@ module KERNELC-SEMANTICS
     =>
       ListItem(""
         +String "type c_pointer = C_pointer_object of int | C_pointer_null;;\n"
-        +String "type c_type = C_type_int | C_type_double | C_type_pointer of c_type | C_type_struct of string;;\n"
+        +String "type c_type = C_type_int | C_type_double | C_type_pointer of c_type | C_type_struct of string | C_type_void;;\n"
         +String "type c_value = C_value_int of int | C_value_float of float | C_value_pointer of c_pointer | C_value_undef;;\n"
         +String "type c_typed_value = C_typed_value of c_type * c_value;;\n"
         +String "module C_pointer = struct type t = c_pointer let compare : t -> t -> int = compare end;;\n"
@@ -625,7 +625,7 @@ module KERNELC-SEMANTICS
         +String "let stackMemoryRef = ref MemoryMap.empty;;\n"
         +String "let heapMemoryRef = ref MemoryMap.empty;;\n"
         +String C +String "\n;;\n"
-        +String "match main with (C_value_int n) -> n;;\n")
+        +String "match main () with (C_value_int n) -> n;;\n")
     </stdout>
 
   syntax EvaluatedExpressions ::= makeTypedArguments(ParameterDeclarations)    [function]

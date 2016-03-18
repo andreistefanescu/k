@@ -130,6 +130,7 @@ public class GenOperations {
                 .put("'double", "C_type_double")
                 .put("'_*", "C_type_pointer")
                 .put("'struct_", "C_type_struct")
+                .put("'void", "C_type_void")
                 .put("'tv(_,_)", "C_typed_value")
                 .put("'undef", "C_value_undef")
                 .build();
@@ -192,7 +193,8 @@ public class GenOperations {
             }
 
             if (kLabel.label().equals("'call")) {
-                return new SMTLibTerm("(" + ((UninterpretedToken) kList.get(0)).value() + " " + flattenArgumentList((KItem) kList.get(1)).stream().map(t -> ((SMTLibTerm) t.accept(this)).expression()).collect(Collectors.joining(" ")) + ")");
+                String argumentsString = flattenArgumentList((KItem) kList.get(1)).stream().map(t -> ((SMTLibTerm) t.accept(this)).expression()).collect(Collectors.joining(" "));
+                return new SMTLibTerm("(" + ((UninterpretedToken) kList.get(0)).value() + " " + (argumentsString.equals("") ? "()" : argumentsString) + ")");
             } else if (kLabel.label().equals("'return")) {
                 if (kList.get(0).sort().equals(Sort.of("Value"))) {
                     return new SMTLibTerm("(raise (Return " + ((SMTLibTerm) kList.get(0).accept(this)).expression() + "))");
