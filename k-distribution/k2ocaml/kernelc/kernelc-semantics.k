@@ -637,8 +637,8 @@ module KERNELC-SEMANTICS
   rule valueOfType(double) => tv(double, ?_:Value)
   rule valueOfType(T:Type *) => tv(T:Type *, ?_:Value)
   syntax String ::= Arguments2String(EvaluatedExpressions)  [function]
-  rule Arguments2String(TV:TypedValue, EEs:EvaluatedExpressions)
-    => " " +String #term(TV) +String Arguments2String(EEs)
+  rule Arguments2String(tv(_:Type, V:Value), EEs:EvaluatedExpressions)
+    => " " +String #term(tv(?_:Type, V)) +String Arguments2String(EEs)
   rule Arguments2String(.EvaluatedExpressions) => ""
 
   syntax Values ::= List{Value, ","}
